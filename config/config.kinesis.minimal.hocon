@@ -1,0 +1,16 @@
+{
+  "input": {
+    "streamName": "snowplow-enriched-events"
+  }
+
+  "output": {
+
+    "good": {
+      "host": "https://<identifier>.cloud.databricks.com"
+      "token": ${DATABRICKS_TOKEN}
+    }
+
+    "bad": null # TODO need kinesis sink
+
+  }
+}
