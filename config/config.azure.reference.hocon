@@ -23,6 +23,9 @@
 
       # -- Access token to authenticate with Databricks
       "token": ${DATABRICKS_TOKEN}
+
+      # -- Compression algorithm for the uploaded parquet file
+      "compression": "snappy"
     }
 
     "bad": {

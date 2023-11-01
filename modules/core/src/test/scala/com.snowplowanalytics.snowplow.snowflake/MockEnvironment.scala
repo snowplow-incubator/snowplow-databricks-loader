@@ -10,6 +10,7 @@ package com.snowplowanalytics.snowplow.databricks
 import cats.effect.IO
 import cats.effect.kernel.{Ref, Resource, Unique}
 import org.http4s.client.Client
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import fs2.Stream
 
 import com.snowplowanalytics.iglu.client.Resolver
@@ -61,7 +62,8 @@ object MockEnvironment {
           maxBytes          = 16000000,
           maxDelay          = 10.seconds,
           uploadConcurrency = 1
-        )
+        ),
+        compression = CompressionCodecName.SNAPPY
       )
       MockEnvironment(state, env)
     }

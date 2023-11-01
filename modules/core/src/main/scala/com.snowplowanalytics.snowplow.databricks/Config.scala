@@ -15,8 +15,10 @@ import io.circe.generic.extras.Configuration
 import io.circe.config.syntax._
 import org.http4s.Uri
 import com.comcast.ip4s.Port
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Try
 
 import com.snowplowanalytics.iglu.client.resolver.Resolver.ResolverConfig
 import com.snowplowanalytics.snowplow.runtime.{Metrics => CommonMetrics, Telemetry}
@@ -37,7 +39,8 @@ object Config {
 
   case class Databricks(
     host: Uri,
-    token: String
+    token: String,
+    compression: CompressionCodecName
   )
 
   case class Batching(
@@ -88,6 +91,9 @@ object Config {
     implicit val configuration = Configuration.default.withDiscriminator("type")
     implicit val uriDecoder = Decoder.decodeString.emap { str =>
       Uri.fromString(str).leftMap(_.message)
+    }
+    implicit val compressionDecoder = Decoder.decodeString.emapTry { str =>
+      Try(CompressionCodecName.valueOf(str.toUpperCase))
     }
     implicit val databricks    = deriveConfiguredDecoder[Databricks]
     implicit val output        = deriveConfiguredDecoder[Output[Sink]]
