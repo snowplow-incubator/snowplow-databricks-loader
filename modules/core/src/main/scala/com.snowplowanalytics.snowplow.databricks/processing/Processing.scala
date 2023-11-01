@@ -130,7 +130,7 @@ object Processing {
     for {
       InMemoryFileSystem.Configured(hadoopConf, getBytes) <- Stream.resource(InMemoryFileSystem.configure(env.batching))
       batch <- in
-      _ <- ParquetUtils.write[F](hadoopConf, batch.schema, batch.events).unitary
+      _ <- ParquetUtils.write[F](hadoopConf, env.compression, batch.schema, batch.events).unitary
       bytes <- Stream.eval[F, ByteBuffer](getBytes)
     } yield Serialized(bytes, batch.events.length, batch.tokens)
   }

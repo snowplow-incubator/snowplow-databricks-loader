@@ -19,6 +19,7 @@ import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 import java.nio.ByteBuffer
+import java.util.UUID
 
 import com.snowplowanalytics.snowplow.databricks.Config
 
@@ -36,7 +37,7 @@ object DatabricksUploader {
     def upload(bytes: ByteBuffer): F[Unit] =
       for {
         uuid <- UUIDGen[F].randomUUID
-        uri = config.host / "api" / "2.0" / "fs" / s"$uuid.parquet"
+        uri = config.host / "api" / "2.0" / "fs" / filename(config, uuid)
         req = Request[F](
                 method  = Method.PUT,
                 uri     = uri,
@@ -47,6 +48,11 @@ object DatabricksUploader {
         status <- client.status(req)
         _ <- raiseForStatus[F](status)
       } yield ()
+  }
+
+  private def filename(config: Config.Databricks, uuid: UUID): String = {
+    val ext = config.compression.getExtension
+    s"$uuid.$ext.parquet"
   }
 
   private def headers(config: Config.Databricks): Headers =

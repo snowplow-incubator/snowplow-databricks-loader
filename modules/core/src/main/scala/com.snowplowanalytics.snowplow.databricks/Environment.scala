@@ -11,6 +11,7 @@ import cats.implicits._
 import cats.Functor
 import cats.effect.{Async, Resource, Sync}
 import cats.effect.unsafe.implicits.global
+import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.http4s.client.Client
 import org.http4s.blaze.client.BlazeClientBuilder
 import io.sentry.Sentry
@@ -29,7 +30,8 @@ case class Environment[F[_]](
   httpClient: Client[F],
   databricks: DatabricksUploader[F],
   metrics: Metrics[F],
-  batching: Config.Batching
+  batching: Config.Batching,
+  compression: CompressionCodecName
 )
 
 object Environment {
@@ -50,14 +52,15 @@ object Environment {
       databricks = DatabricksUploader.impl[F](config.main.output.good, httpClient)
       _ <- HealthProbe.resource(config.main.monitoring.healthProbe.port, isHealthy(config.main.monitoring.healthProbe, sourceAndAck))
     } yield Environment(
-      appInfo    = appInfo,
-      source     = sourceAndAck,
-      badSink    = badSink,
-      resolver   = resolver,
-      httpClient = httpClient,
-      databricks = databricks,
-      metrics    = metrics,
-      batching   = config.main.batching
+      appInfo     = appInfo,
+      source      = sourceAndAck,
+      badSink     = badSink,
+      resolver    = resolver,
+      httpClient  = httpClient,
+      databricks  = databricks,
+      metrics     = metrics,
+      batching    = config.main.batching,
+      compression = config.main.output.good.compression
     )
 
   private def enableSentry[F[_]: Sync](appInfo: AppInfo, config: Option[Config.Sentry]): Resource[F, Unit] =
