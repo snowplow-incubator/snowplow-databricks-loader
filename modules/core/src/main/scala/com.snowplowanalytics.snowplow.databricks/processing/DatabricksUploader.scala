@@ -31,13 +31,12 @@ object DatabricksUploader {
 
   private implicit def logger[F[_]: Sync]: Logger[F] = Slf4jLogger.getLogger[F]
 
-  // TODO: compression suffix?
   // TODO: partitioning?
   def impl[F[_]: Sync](config: Config.Databricks, client: Client[F]): DatabricksUploader[F] = new DatabricksUploader[F] {
     def upload(bytes: ByteBuffer): F[Unit] =
       for {
         uuid <- UUIDGen[F].randomUUID
-        uri = config.host / "api" / "2.0" / "fs" / filename(config, uuid)
+        uri = config.host / "api" / "2.0" / "fs" / "Volumes" / config.catalog / config.schema / config.volume / filename(config, uuid)
         req = Request[F](
                 method  = Method.PUT,
                 uri     = uri,

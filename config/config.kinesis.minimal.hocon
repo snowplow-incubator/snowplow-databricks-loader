@@ -8,6 +8,9 @@
     "good": {
       "host": "https://<identifier>.cloud.databricks.com"
       "token": ${DATABRICKS_TOKEN}
+      "catalog": "snowplow"
+      "schema": "atomic"
+      "volume": "snowplow"
     }
 
     "bad": null # TODO need kinesis sink
