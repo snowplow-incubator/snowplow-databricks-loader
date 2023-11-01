@@ -40,6 +40,9 @@ object Config {
   case class Databricks(
     host: Uri,
     token: String,
+    catalog: String,
+    schema: String,
+    volume: String,
     compression: CompressionCodecName
   )
 

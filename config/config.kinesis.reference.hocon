@@ -31,6 +31,15 @@
       # -- Access token to authenticate with Databricks
       "token": ${DATABRICKS_TOKEN}
 
+      # -- Databricks Unity Catalog name
+      "catalog": "snowplow"
+
+      # -- Databricks schema
+      "schema": "atomic"
+
+      # -- Databricks Unity Catalog Volume name
+      "volume": "snowplow"
+
       # -- Compression algorithm for the uploaded parquet file
       "compression": "snappy"
     }
