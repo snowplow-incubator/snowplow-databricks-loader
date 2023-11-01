@@ -1,0 +1,18 @@
+{
+  "input": {
+    "subscription": "projects/myproject/subscriptions/snowplow-enriched"
+  }
+
+  "output": {
+
+    "good": {
+      "host": "https://<identifier>.cloud.databricks.com"
+      "token": ${DATABRICKS_TOKEN}
+    }
+
+    "bad": {
+      "topic": "projects/myproject/topics/snowplow-bad"
+    }
+
+  }
+}

@@ -1,0 +1,113 @@
+/*
+ * Copyright (c) 2023-present Snowplow Analytics Ltd. All rights reserved.
+ *
+ * This program is licensed to you under the Snowplow Community License Version 1.0,
+ * and you may not use this file except in compliance with the Snowplow Community License Version 1.0.
+ * You may obtain a copy of the Snowplow Community License Version 1.0 at https://docs.snowplow.io/community-license-1.0
+ */
+package com.snowplowanalytics.snowplow.databricks
+
+import cats.implicits._
+import cats.Id
+import io.circe.Decoder
+import io.circe.generic.extras.semiauto._
+import io.circe.generic.extras.Configuration
+import io.circe.config.syntax._
+import org.http4s.Uri
+import com.comcast.ip4s.Port
+
+import scala.concurrent.duration.FiniteDuration
+
+import com.snowplowanalytics.iglu.client.resolver.Resolver.ResolverConfig
+import com.snowplowanalytics.snowplow.runtime.{Metrics => CommonMetrics, Telemetry}
+
+case class Config[+Source, +Sink](
+  input: Source,
+  output: Config.Output[Sink],
+  batching: Config.Batching,
+  telemetry: Telemetry.Config,
+  monitoring: Config.Monitoring
+)
+
+object Config {
+
+  case class WithIglu[+Source, +Sink](main: Config[Source, Sink], iglu: ResolverConfig)
+
+  case class Output[+Sink](good: Databricks, bad: Sink)
+
+  case class Databricks(
+    host: Uri,
+    token: String
+  )
+
+  case class Batching(
+    maxBytes: Int,
+    maxDelay: FiniteDuration,
+    uploadConcurrency: Int
+  )
+
+  case class Metrics(
+    statsd: Option[CommonMetrics.StatsdConfig]
+  )
+
+  private case class StatsdUnresolved(
+    hostname: Option[String],
+    port: Int,
+    tags: Map[String, String],
+    period: FiniteDuration,
+    prefix: String
+  )
+
+  private object Statsd {
+
+    def resolve(statsd: StatsdUnresolved): Option[CommonMetrics.StatsdConfig] =
+      statsd match {
+        case StatsdUnresolved(Some(hostname), port, tags, period, prefix) =>
+          Some(CommonMetrics.StatsdConfig(hostname, port, tags, period, prefix))
+        case StatsdUnresolved(None, _, _, _, _) =>
+          None
+      }
+  }
+
+  case class SentryM[M[_]](
+    dsn: M[String],
+    tags: Map[String, String]
+  )
+
+  type Sentry = SentryM[Id]
+
+  case class HealthProbe(port: Port, unhealthyLatency: FiniteDuration)
+
+  case class Monitoring(
+    metrics: Metrics,
+    sentry: Option[Sentry],
+    healthProbe: HealthProbe
+  )
+
+  implicit def decoder[Source: Decoder, Sink: Decoder]: Decoder[Config[Source, Sink]] = {
+    implicit val configuration = Configuration.default.withDiscriminator("type")
+    implicit val uriDecoder = Decoder.decodeString.emap { str =>
+      Uri.fromString(str).leftMap(_.message)
+    }
+    implicit val databricks    = deriveConfiguredDecoder[Databricks]
+    implicit val output        = deriveConfiguredDecoder[Output[Sink]]
+    implicit val batching      = deriveConfiguredDecoder[Batching]
+    implicit val telemetry     = deriveConfiguredDecoder[Telemetry.Config]
+    implicit val statsdDecoder = deriveConfiguredDecoder[StatsdUnresolved].map(Statsd.resolve(_))
+    implicit val sentryDecoder = deriveConfiguredDecoder[SentryM[Option]]
+      .map[Option[Sentry]] {
+        case SentryM(Some(dsn), tags) =>
+          Some(SentryM[Id](dsn, tags))
+        case SentryM(None, _) =>
+          None
+      }
+    implicit val metricsDecoder = deriveConfiguredDecoder[Metrics]
+    implicit val portDecoder = Decoder.decodeInt.emap { port =>
+      Port.fromInt(port).toRight("Invalid port")
+    }
+    implicit val healthProbeDecoder = deriveConfiguredDecoder[HealthProbe]
+    implicit val monitoringDecoder  = deriveConfiguredDecoder[Monitoring]
+    deriveConfiguredDecoder[Config[Source, Sink]]
+  }
+
+}
