@@ -20,23 +20,26 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 import java.nio.ByteBuffer
 import java.util.UUID
+import java.time.{Instant, ZoneOffset}
+import java.time.format.DateTimeFormatter
 
 import com.snowplowanalytics.snowplow.databricks.Config
 
 trait DatabricksUploader[F[_]] {
-  def upload(bytes: ByteBuffer): F[Unit]
+  def upload(bytes: ByteBuffer, loadTsamp: Instant): F[Unit]
 }
 
 object DatabricksUploader {
 
   private implicit def logger[F[_]: Sync]: Logger[F] = Slf4jLogger.getLogger[F]
 
-  // TODO: partitioning?
   def impl[F[_]: Sync](config: Config.Databricks, client: Client[F]): DatabricksUploader[F] = new DatabricksUploader[F] {
-    def upload(bytes: ByteBuffer): F[Unit] =
+    def upload(bytes: ByteBuffer, loadTstamp: Instant): F[Unit] =
       for {
         uuid <- UUIDGen[F].randomUUID
-        uri = config.host / "api" / "2.0" / "fs" / "Volumes" / config.catalog / config.schema / config.volume / filename(config, uuid)
+        partition = timePartition(loadTstamp)
+        name      = filename(config, loadTstamp, uuid)
+        uri       = config.host / "api" / "2.0" / "fs" / "Volumes" / config.catalog / config.schema / config.volume / partition / name
         req = Request[F](
                 method  = Method.PUT,
                 uri     = uri,
@@ -49,9 +52,22 @@ object DatabricksUploader {
       } yield ()
   }
 
-  private def filename(config: Config.Databricks, uuid: UUID): String = {
-    val ext = config.compression.getExtension
-    s"$uuid.$ext.parquet"
+  private val dayFormatter: DateTimeFormatter    = DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneOffset.UTC)
+  private val secondFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss").withZone(ZoneOffset.UTC)
+
+  private def filename(
+    config: Config.Databricks,
+    loadTstamp: Instant,
+    uuid: UUID
+  ): String = {
+    val ext    = config.compression.getExtension
+    val prefix = secondFormatter.format(loadTstamp)
+    s"$prefix-$uuid.$ext.parquet"
+  }
+
+  private def timePartition(loadTstamp: Instant): String = {
+    val value = dayFormatter.format(loadTstamp)
+    s"load_tstamp_date=$value"
   }
 
   private def headers(config: Config.Databricks): Headers =

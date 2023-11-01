@@ -21,6 +21,7 @@ import com.snowplowanalytics.snowplow.runtime.AppInfo
 
 import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 import java.nio.ByteBuffer
+import java.time.Instant
 
 case class MockEnvironment(state: Ref[IO, Vector[MockEnvironment.Action]], environment: Environment[IO])
 
@@ -76,7 +77,7 @@ object MockEnvironment {
   }
 
   private def testDatabricksUploader(state: Ref[IO, Vector[Action]]): DatabricksUploader[IO] = new DatabricksUploader[IO] {
-    def upload(bytes: ByteBuffer): IO[Unit] =
+    def upload(bytes: ByteBuffer, loadTstamp: Instant): IO[Unit] =
       state.update(_ :+ UploadedFile)
   }
 
