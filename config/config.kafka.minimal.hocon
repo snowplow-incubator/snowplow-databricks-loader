@@ -1,0 +1,29 @@
+{
+  "license": {
+    "accept": true
+  }
+
+  "input": {
+    "topicName": "sp-dev-enriched"
+    "bootstrapServers": "localhost:9092"
+  }
+
+  "output": {
+
+    "good": {
+      "host": "https://<identifier>.cloud.databricks.com"
+      "oauth": {
+        "clientId": ${DATABRICKS_CLIENT_ID}
+        "clientSecret": ${DATABRICKS_CLIENT_SECRET}
+      }
+      "catalog": "snowplow"
+      "schema": "atomic"
+      "volume": "snowplow"
+    }
+
+    "bad": {
+      "topicName": "sp-dev-bad"
+      "bootstrapServers": "localhost:9092"
+    }
+  }
+}

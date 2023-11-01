@@ -1,0 +1,201 @@
+{
+  # -- Accept the terms of the Snowplow Limited Use License Agreement
+  # -- See https://docs.snowplow.io/limited-use-license-1.1/
+  "license": {
+    "accept": true
+  }
+
+  "input": {
+    # -- pubsub subscription for the source of enriched events
+    "subscription": "projects/myproject/subscriptions/snowplow-enriched"
+
+    # -- Controls how many threads are used internally by the pubsub client library for fetching events.
+    # -- The number of threads is equal to this factor multiplied by the number of availble cpu cores
+    "parallelPullFactor": 0.5
+
+    # -- Pubsub ack deadlines are extended for this duration when needed.
+    "durationPerAckExtension": "60 seconds"
+
+    # -- Controls when ack deadlines are re-extended, for a message that is close to exceeding its ack deadline.
+    # -- For example, if `durationPerAckExtension` is `60 seconds` and `minRemainingAckDeadline` is `0.1` then the Source
+    # -- will wait until there is `6 seconds` left of the remining deadline, before re-extending the message deadline.
+    "minRemainingAckDeadline": 0.1
+
+    # -- How many pubsub messages to pull from the server in a single request.
+    "maxMessagesPerPull": 1000
+
+    # -- Adds an artifical delay between consecutive requests to pubsub for more messages.
+    # -- Under some circumstances, this was found to slightly alleviate a problem in which pubsub might re-deliver
+    # -- the same messages multiple times.
+    "debounceRequests": "100 millis"
+  }
+
+  "output": {
+
+    "good": {
+      # -- Base URL of the Databricks instance
+      "host": "https://<identifier>.cloud.databricks.com"
+
+      # -- Required if using machine-to-machine oauth authentication
+      "oauth": {
+        "clientId": ${DATABRICKS_CLIENT_ID}
+        "clientSecret": ${DATABRICKS_CLIENT_SECRET}
+      }
+
+      # -- Personal access token (PAT) to authenticate. An alternative to oauth.
+      "token": ${DATABRICKS_TOKEN}
+
+      # -- Databricks Unity Catalog name
+      "catalog": "snowplow"
+
+      # -- Databricks schema
+      "schema": "atomic"
+
+      # -- Databricks Unity Catalog Volume name
+      "volume": "snowplow"
+
+      # -- Compression algorithm for the uploaded parquet file
+      "compression": "snappy"
+    }
+
+    "bad": {
+      # -- output pubsub topic for emitting failed events that could not be processed
+      "topic": "projects/myproject/topics/snowplow-bad"
+
+      # -- Failed sends events to pubsub in batches not exceeding this size.
+      "batchSize": 100
+      # -- Failed events to pubsub in batches not exceeding this size number of bytes
+      "requestByteThreshold": 1000000
+    }
+
+  }
+
+  "batching": {
+
+    # - Events are uploaded to databricks when the batch reaches this size in bytes
+    "maxBytes": 16000000
+
+    # - Events are uploaded to Databricks after exceeding this duration, even if the `maxBytes` size has not been reached
+    "maxDelay": "1 second"
+
+    # - How many batches can we send simultaneously over the network to Databricks.
+    "uploadConcurrency":  1
+  }
+
+  # Retry configuration for Databricks operation failures
+  "retries": {
+
+    # -- Configures exponential backoff on errors related to how Databricks is set up for this loader.
+    # -- Examples include authentication errors and permissions errors.
+    # -- This class of errors are reported periodically to the monitoring webhook.
+    "setupErrors": {
+      "delay": "30 seconds"
+    }
+
+    # -- Configures exponential backoff errors that are likely to be transient.
+    # -- Examples include server errors and network errors
+    "transientErrors": {
+      "delay": "1 second"
+      "attempts": 5
+    }
+  }
+
+  # -- Schemas that won't be loaded to Databricks. Optional, default value []
+  "skipSchemas": [
+    "iglu:com.acme/skipped1/jsonschema/1-0-0",
+    "iglu:com.acme/skipped2/jsonschema/1-0-*",
+    "iglu:com.acme/skipped3/jsonschema/1-*-*",
+    "iglu:com.acme/skipped4/jsonschema/*-*-*"
+  ]
+
+  # -- Whether the loader should crash and exit if it fails to resolve an Iglu Schema.
+  # -- We recommend `true` because Snowplow enriched events have already passed validation, so a missing schema normally
+  # -- indicates an error that needs addressing.
+  # -- Change to `false` so events go the failed events stream instead of crashing the loader.
+  "exitOnMissingIgluSchema": true
+
+  "monitoring": {
+    "metrics": {
+
+      # -- Send runtime metrics to a statsd server
+      "statsd": {
+        "hostname": "127.0.0.1"
+        "port": 8125
+
+        # -- Map of key/value pairs to be send along with the metric
+        "tags": {
+          "myTag": "xyz"
+        }
+
+        # -- How often to report metrics
+        "period": "1 minute"
+
+        # -- Prefix used for the metric name when sending to statsd
+        "prefix": "snowplow.databricks-loader"
+      }
+    }
+
+    # -- Report unexpected runtime exceptions to Sentry
+    "sentry": {
+      "dsn": "https://public@sentry.example.com/1"
+
+      # -- Map of key/value pairs to be included as tags
+      "tags": {
+        "myTag": "xyz"
+      }
+    }
+
+    # -- Report alerts and heartbeats to the webhook
+    "webhook": {
+      # URL of a server listening for the webhook
+      "endpoint": "https://webhook.acme.com",
+      # Set of arbitrary key-value pairs attached to the payload
+      "tags": {
+        "pipeline": "production"
+      }
+      # How often to send the heartbeat event
+      "heartbeat": "60.minutes"
+    }
+  }
+
+  # -- Optional, configure telemetry
+  # -- All the fields are optional
+  "telemetry": {
+
+    # -- Set to true to disable telemetry
+    "disable": false
+
+    # -- Interval for the heartbeat event
+    "interval": 15 minutes
+
+    # -- HTTP method used to send the heartbeat event
+    "method": POST
+
+    # -- URI of the collector receiving the heartbeat event
+    "collectorUri": "https://collector-g.snowplowanalytics.com"
+
+    # -- Port of the collector receiving the heartbeat event
+    "collectorPort": 443
+
+    # -- Whether to use https or not
+    "secure": true
+
+    # -- Identifier intended to tie events together across modules,
+    # -- infrastructure and apps when used consistently
+    "userProvidedId": my_pipeline
+
+    # -- ID automatically generated upon running a modules deployment script
+    # -- Intended to identify each independent module, and the infrastructure it controls
+    "autoGeneratedId": hfy67e5ydhtrd
+
+    # -- Unique identifier for the VM instance
+    # -- Unique for each instance of the app running within a module
+    "instanceId": 665bhft5u6udjf
+
+    # -- Name of the terraform module that deployed the app
+    "moduleName": databricks-loader-vmss
+
+    # -- Version of the terraform module that deployed the app
+    "moduleVersion": 1.0.0
+  }
+}

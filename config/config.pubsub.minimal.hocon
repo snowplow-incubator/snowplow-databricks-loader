@@ -1,0 +1,28 @@
+{
+  "license": {
+    "accept": true
+  }
+
+  "input": {
+    "subscription": "projects/my-project/subscriptions/snowplow-enriched"
+  }
+
+  "output": {
+
+    "good": {
+      "host": "https://<identifier>.cloud.databricks.com"
+      "oauth": {
+        "clientId": ${DATABRICKS_CLIENT_ID}
+        "clientSecret": ${DATABRICKS_CLIENT_SECRET}
+      }
+      "catalog": "snowplow"
+      "schema": "atomic"
+      "volume": "snowplow"
+    }
+
+    "bad": {
+      "topic": "projects/my-project/topics/snowplow-bad"
+    }
+
+  }
+}

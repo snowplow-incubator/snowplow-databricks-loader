@@ -1,0 +1,27 @@
+{
+  "license": {
+    "accept": true
+  }
+
+  "input": {
+    "streamName": "snowplow-enriched-events"
+  }
+
+  "output": {
+
+    "good": {
+      "host": "https://<identifier>.cloud.databricks.com"
+      "oauth": {
+        "clientId": ${DATABRICKS_CLIENT_ID}
+        "clientSecret": ${DATABRICKS_CLIENT_SECRET}
+      }
+      "catalog": "snowplow"
+      "schema": "atomic"
+      "volume": "snowplow"
+    }
+
+    "bad": {
+      "streamName": "bad"
+    }
+  }
+}
