@@ -20,6 +20,7 @@ import com.github.mjakubowski84.parquet4s.RowParquetRecord
 
 import java.nio.charset.StandardCharsets
 import java.nio.ByteBuffer
+import java.time.Instant
 import scala.concurrent.duration.Duration
 
 import com.snowplowanalytics.iglu.client.resolver.registries.{Http4sRegistryLookup, RegistryLookup}
@@ -54,12 +55,14 @@ object Processing {
     events: Vector[RowParquetRecord],
     schema: MessageType,
     badAccumulated: List[BadRow],
+    loadTstamp: Instant,
     tokens: List[Unique.Token]
   )
 
   private case class Serialized(
     bytes: ByteBuffer,
     goodCount: Int,
+    loadTstamp: Instant,
     tokens: List[Unique.Token]
   )
 
@@ -120,10 +123,10 @@ object Processing {
       for {
         _ <- Logger[F].debug(s"Processing batch of size ${events.size} and $numBytes bytes")
         nonAtomicFields <- NonAtomicFields.resolveTypes[F](env.resolver, entities)
-        now <- Sync[F].realTimeInstant
-        ParquetUtils.TransformResult(moreBad, good) <- ParquetUtils.transform[F](badProcessor, events, nonAtomicFields, now)
+        loadTstamp <- Sync[F].realTimeInstant
+        ParquetUtils.TransformResult(moreBad, good) <- ParquetUtils.transform[F](badProcessor, events, nonAtomicFields, loadTstamp)
         schema = ParquetSchema.forBatch(nonAtomicFields.fields.map(_.mergedField))
-      } yield Transformed(good, schema, moreBad.toList ::: bad, tokens)
+      } yield Transformed(good, schema, moreBad.toList ::: bad, loadTstamp, tokens)
     }
 
   private def writeToParquet[F[_]: Sync](env: Environment[F]): Pipe[F, Transformed, Serialized] = { in =>
@@ -132,13 +135,13 @@ object Processing {
       batch <- in
       _ <- ParquetUtils.write[F](hadoopConf, env.compression, batch.schema, batch.events).unitary
       bytes <- Stream.eval[F, ByteBuffer](getBytes)
-    } yield Serialized(bytes, batch.events.length, batch.tokens)
+    } yield Serialized(bytes, batch.events.length, batch.loadTstamp, batch.tokens)
   }
 
   private def sendToDatabricks[F[_]: Async](env: Environment[F]): Pipe[F, Serialized, Serialized] =
     _.parEvalMap(env.batching.uploadConcurrency) { batch =>
       if (batch.goodCount > 0)
-        env.databricks.upload(batch.bytes).as(batch)
+        env.databricks.upload(batch.bytes, batch.loadTstamp).as(batch)
       else
         batch.pure[F]
     }
