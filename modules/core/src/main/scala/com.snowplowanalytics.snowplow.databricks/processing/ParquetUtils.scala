@@ -7,7 +7,7 @@
  */
 package com.snowplowanalytics.snowplow.databricks.processing
 
-import cats.Applicative
+import cats.Foldable
 import cats.implicits._
 import cats.effect.Sync
 import io.circe.Json
@@ -27,6 +27,7 @@ import com.snowplowanalytics.iglu.schemaddl.parquet.{Caster, Type}
 import com.snowplowanalytics.snowplow.analytics.scalasdk.Event
 import com.snowplowanalytics.snowplow.badrows.{BadRow, Processor => BadProcessor}
 import com.snowplowanalytics.snowplow.loaders.transform.{NonAtomicFields, Transform}
+import com.snowplowanalytics.snowplow.runtime.syntax.foldable._
 
 private[processing] object ParquetUtils {
 
@@ -34,7 +35,7 @@ private[processing] object ParquetUtils {
     hadoopConf: Configuration,
     compression: CompressionCodecName,
     schema: MessageType,
-    events: Vector[RowParquetRecord]
+    events: List[RowParquetRecord]
   ): Stream[F, Nothing] =
     writeSingleFile[F]
       .generic(schema)
@@ -42,24 +43,23 @@ private[processing] object ParquetUtils {
       .write(Path("/output.parquet")) // file name is not important
       .apply(Stream.emits(events))
 
-  case class TransformResult(bad: Vector[BadRow], good: Vector[RowParquetRecord])
+  case class TransformResult(bad: List[BadRow], good: List[RowParquetRecord])
 
-  def transform[F[_]: Applicative](
+  def transform[F[_]: Sync](
     badProcessor: BadProcessor,
     events: Vector[Event],
     entities: NonAtomicFields.Result,
     loadTstamp: Instant
   ): F[TransformResult] =
-    events
-      .traverse { event =>
-        Applicative[F].pure {
+    Foldable[Vector]
+      .traverseSeparateUnordered(events) { event =>
+        Sync[F].delay {
           Transform
             .transformEvent(badProcessor, caster, event, entities)
             .map(vs => rowParquetRecord(vs).prepended("load_tstamp", caster.timestampValue(loadTstamp)))
         }
       }
-      .map { results =>
-        val (bad, good) = results.separate
+      .map { case (bad, good) =>
         TransformResult(bad, good)
       }
 
