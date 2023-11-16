@@ -8,7 +8,7 @@
 package com.snowplowanalytics.snowplow.databricks.processing
 
 import cats.effect.IO
-import fs2.Stream
+import fs2.{Chunk, Stream}
 import org.specs2.Specification
 import cats.effect.testing.specs2.CatsEffect
 import cats.effect.testkit.TestControl
@@ -69,7 +69,7 @@ class ProcessingSpec extends Specification with CatsEffect {
       bads <- generateBadlyFormatted.take(3).compile.toList
       goods <- generateEvents.take(3).compile.toList
       inputs = bads.zip(goods).map { case (bad, good) =>
-                 TokenedEvents(bad.events ::: good.events, good.ack, None)
+                 TokenedEvents(bad.events ++ good.events, good.ack, None)
                }
       control <- MockEnvironment.build(inputs)
       _ <- Processing.stream(control.environment).compile.drain
@@ -127,7 +127,7 @@ object ProcessingSpec {
       } yield {
         val event1 = Event.minimal(eventId1, collectorTstamp, "0.0.0", "0.0.0")
         val event2 = Event.minimal(eventId2, collectorTstamp, "0.0.0", "0.0.0")
-        val serialized = List(event1, event2).map { e =>
+        val serialized = Chunk(event1, event2).map { e =>
           ByteBuffer.wrap(e.toTsv.getBytes(StandardCharsets.UTF_8))
         }
         TokenedEvents(serialized, ack, None)
@@ -137,7 +137,7 @@ object ProcessingSpec {
   def generateBadlyFormatted: Stream[IO, TokenedEvents] =
     Stream.eval {
       IO.unique.map { token =>
-        val serialized = List("nonsense1", "nonsense2").map(s => ByteBuffer.wrap(s.getBytes(StandardCharsets.UTF_8)))
+        val serialized = Chunk("nonsense1", "nonsense2").map(s => ByteBuffer.wrap(s.getBytes(StandardCharsets.UTF_8)))
         TokenedEvents(serialized, token, None)
       }
     }.repeat
