@@ -36,8 +36,8 @@ class InMemoryFileSystem extends FileSystem { fs =>
   ): FSDataOutputStream = {
     val estimateFileSize = fs.getConf.getInt(InMemoryFileSystem.bufferSizeKey, 0)
     val out: OutputStream = new ByteArrayOutputStream(estimateFileSize) { o =>
-      override def flush(): Unit = {
-        super.flush()
+      override def close(): Unit = {
+        super.close()
         fs.outputBytes = ByteBuffer.wrap(o.buf, 0, o.count)
       }
     }
