@@ -28,7 +28,7 @@ object Dependencies {
     val hadoop   = "3.3.6"
 
     // Snowplow
-    val streams    = "0.1.0"
+    val streams    = "0.2.0"
     val igluClient = "3.1.0"
 
     // tests

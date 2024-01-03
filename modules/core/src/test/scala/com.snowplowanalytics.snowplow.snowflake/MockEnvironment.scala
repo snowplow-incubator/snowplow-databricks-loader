@@ -7,6 +7,7 @@
  */
 package com.snowplowanalytics.snowplow.databricks
 
+import cats.implicits._
 import cats.effect.IO
 import cats.effect.kernel.{Ref, Resource, Unique}
 import org.http4s.client.Client
@@ -19,7 +20,7 @@ import com.snowplowanalytics.snowplow.sinks.Sink
 import com.snowplowanalytics.snowplow.databricks.processing.DatabricksUploader
 import com.snowplowanalytics.snowplow.runtime.AppInfo
 
-import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import java.nio.ByteBuffer
 import java.time.Instant
 
@@ -30,11 +31,11 @@ object MockEnvironment {
   sealed trait Action
   object Action {
     case class Checkpointed(tokens: List[Unique.Token]) extends Action
-    case class SentToBad(count: Int) extends Action
+    case class SentToBad(count: Long) extends Action
     case object UploadedFile extends Action
 
-    case class AddedGoodCountMetric(count: Int) extends Action
-    case class AddedBadCountMetric(count: Int) extends Action
+    case class AddedGoodCountMetric(count: Long) extends Action
+    case class AddedBadCountMetric(count: Long) extends Action
     case class SetLatencyMetric(millis: Long) extends Action
   }
   import Action._
@@ -93,7 +94,8 @@ object MockEnvironment {
           }
           .drain
 
-      def processingLatency: IO[FiniteDuration] = IO.pure(Duration.Zero)
+      def isHealthy(maxAllowedProcessingLatency: FiniteDuration): IO[SourceAndAck.HealthStatus] =
+        IO.pure(SourceAndAck.Healthy)
     }
 
   private def testSink(ref: Ref[IO, Vector[Action]]): Sink[IO] = Sink[IO] { batch =>
@@ -105,10 +107,10 @@ object MockEnvironment {
   }
 
   def testMetrics(ref: Ref[IO, Vector[Action]]): Metrics[IO] = new Metrics[IO] {
-    def addBad(count: Int): IO[Unit] =
+    def addBad(count: Long): IO[Unit] =
       ref.update(_ :+ AddedBadCountMetric(count))
 
-    def addGood(count: Int): IO[Unit] =
+    def addGood(count: Long): IO[Unit] =
       ref.update(_ :+ AddedGoodCountMetric(count))
 
     def setLatencyMillis(latencyMillis: Long): IO[Unit] =

@@ -26,10 +26,11 @@ import com.snowplowanalytics.snowplow.analytics.scalasdk.Event
 import com.snowplowanalytics.snowplow.badrows.{BadRow, Processor => BadRowProcessor}
 import com.snowplowanalytics.snowplow.badrows.Payload.{RawPayload => BadRowRawPayload}
 import com.snowplowanalytics.snowplow.sources.{EventProcessingConfig, EventProcessor, TokenedEvents}
-import com.snowplowanalytics.snowplow.databricks.{Environment, Metrics}
+import com.snowplowanalytics.snowplow.sinks.ListOfList
 import com.snowplowanalytics.snowplow.loaders.transform.{NonAtomicFields, SchemaSubVersion, TabledEntity}
 import com.snowplowanalytics.snowplow.runtime.processing.BatchUp
 import com.snowplowanalytics.snowplow.runtime.syntax.foldable._
+import com.snowplowanalytics.snowplow.databricks.{Environment, Metrics}
 
 object Processing {
 
@@ -43,10 +44,17 @@ object Processing {
 
   /** Model used between stages of the processing pipeline */
 
-  private case class ParsedBatch(
-    events: Vector[Event], // Vector for fast concatenation when batching-up
+  private case class ParseResult(
+    events: List[Event],
+    parseFailures: List[BadRow],
+    countBytes: Long,
+    token: Unique.Token
+  )
+
+  private case class Batched(
+    events: ListOfList[Event],
+    parseFailures: ListOfList[BadRow],
     entities: Map[TabledEntity, Set[SchemaSubVersion]],
-    bad: Vector[BadRow],
     countBytes: Long,
     tokens: Vector[Unique.Token]
   )
@@ -54,14 +62,14 @@ object Processing {
   private case class Transformed(
     events: List[RowParquetRecord],
     schema: MessageType,
-    badAccumulated: List[BadRow],
+    badAccumulated: ListOfList[BadRow],
     loadTstamp: Instant,
     tokens: Vector[Unique.Token]
   )
 
   private case class Serialized(
     bytes: ByteBuffer,
-    goodCount: Int,
+    goodCount: Long,
     loadTstamp: Instant,
     tokens: Vector[Unique.Token]
   )
@@ -98,35 +106,31 @@ object Processing {
     }
 
   /** Parse raw bytes into Event using analytics sdk */
-  private def parseBytes[F[_]: Sync](badProcessor: BadRowProcessor): Pipe[F, TokenedEvents, ParsedBatch] =
+  private def parseBytes[F[_]: Sync](badProcessor: BadRowProcessor): Pipe[F, TokenedEvents, ParseResult] =
     _.evalMap { case TokenedEvents(chunk, token, _) =>
       for {
         numBytes <- Sync[F].delay(Foldable[Chunk].sumBytes(chunk))
-        (badRows, events) <- Foldable[Chunk].traverseSeparateUnordered(chunk) { bytes =>
+        (badRows, events) <- Foldable[Chunk].traverseSeparateUnordered(chunk) { byteBuffer =>
                                Sync[F].delay {
-                                 val stringified = StandardCharsets.UTF_8.decode(bytes).toString
-                                 Event.parse(stringified).toEither.leftMap { failure =>
-                                   val payload = BadRowRawPayload(stringified)
+                                 Event.parseBytes(byteBuffer).toEither.leftMap { failure =>
+                                   val payload = BadRowRawPayload(StandardCharsets.UTF_8.decode(byteBuffer).toString)
                                    BadRow.LoaderParsingError(badProcessor, failure, payload)
                                  }
                                }
                              }
-        entities <- Sync[F].delay {
-                      Foldable[List].foldMap(events)(TabledEntity.forEvent(_))
-                    }
-      } yield ParsedBatch(events.toVector, entities, badRows.toVector, numBytes, Vector(token))
+      } yield ParseResult(events, badRows, numBytes, token)
     }
 
   /** Transform the Event into values compatible with parquet */
-  private def transform[F[_]: Sync: RegistryLookup](badProcessor: BadRowProcessor, env: Environment[F]): Pipe[F, ParsedBatch, Transformed] =
-    _.evalMap { case ParsedBatch(events, entities, bad, numBytes, tokens) =>
+  private def transform[F[_]: Sync: RegistryLookup](badProcessor: BadRowProcessor, env: Environment[F]): Pipe[F, Batched, Transformed] =
+    _.evalMap { case Batched(events, parseFailures, entities, numBytes, tokens) =>
       for {
         _ <- Logger[F].debug(s"Processing batch of size ${events.size} and $numBytes bytes")
         nonAtomicFields <- NonAtomicFields.resolveTypes[F](env.resolver, entities)
         loadTstamp <- Sync[F].realTimeInstant
         ParquetUtils.TransformResult(moreBad, good) <- ParquetUtils.transform[F](badProcessor, events, nonAtomicFields, loadTstamp)
         schema = ParquetSchema.forBatch(nonAtomicFields.fields.map(_.mergedField))
-      } yield Transformed(good, schema, bad.toList ::: moreBad, loadTstamp, tokens)
+      } yield Transformed(good, schema, parseFailures.prepend(moreBad), loadTstamp, tokens)
     }
 
   private def writeToParquet[F[_]: Sync](env: Environment[F]): Pipe[F, Transformed, Serialized] = { in =>
@@ -135,7 +139,7 @@ object Processing {
       batch <- in
       _ <- ParquetUtils.write[F](hadoopConf, env.compression, batch.schema, batch.events).unitary
       bytes <- Stream.eval[F, ByteBuffer](getBytes)
-    } yield Serialized(bytes, batch.events.length, batch.loadTstamp, batch.tokens)
+    } yield Serialized(bytes, batch.events.length.toLong, batch.loadTstamp, batch.tokens)
   }
 
   private def sendToDatabricks[F[_]: Async](env: Environment[F]): Pipe[F, Serialized, Serialized] =
@@ -149,14 +153,14 @@ object Processing {
   private def sendFailedEvents[F[_]: Applicative, A](env: Environment[F]): Pipe[F, Transformed, Transformed] =
     _.evalTap { batch =>
       if (batch.badAccumulated.nonEmpty) {
-        val serialized = batch.badAccumulated.map(_.compact.getBytes(StandardCharsets.UTF_8))
+        val serialized = batch.badAccumulated.mapUnordered(_.compactByteArray)
         env.badSink.sinkSimple(serialized)
       } else Applicative[F].unit
     }
 
   private def setBadMetric[F[_], A](env: Environment[F]): Pipe[F, Transformed, Transformed] =
     _.evalTap { batch =>
-      env.metrics.addBad(batch.badAccumulated.length)
+      env.metrics.addBad(batch.badAccumulated.size)
     }
 
   private def setGoodMetric[F[_], A](env: Environment[F]): Pipe[F, Serialized, Serialized] =
@@ -169,17 +173,21 @@ object Processing {
       Stream.emits(batch.tokens)
     }
 
-  private implicit def parsedBatchable: BatchUp.Batchable[ParsedBatch] = new BatchUp.Batchable[ParsedBatch] {
-    def combine(x: ParsedBatch, y: ParsedBatch): ParsedBatch =
-      ParsedBatch(
-        x.events ++ y.events,
-        x.entities |+| y.entities,
-        x.bad ++ y.bad,
-        x.countBytes + y.countBytes,
-        x.tokens ++ y.tokens
+  private implicit def batchable: BatchUp.Batchable[ParseResult, Batched] = new BatchUp.Batchable[ParseResult, Batched] {
+    def combine(b: Batched, a: ParseResult): Batched =
+      Batched(
+        events        = b.events.prepend(a.events),
+        parseFailures = b.parseFailures.prepend(a.parseFailures),
+        countBytes    = b.countBytes + a.countBytes,
+        entities      = Foldable[List].foldMap(a.events)(TabledEntity.forEvent(_)) |+| b.entities,
+        tokens        = b.tokens :+ a.token
       )
-
-    def weightOf(a: ParsedBatch): Long = a.countBytes
+    def single(a: ParseResult): Batched = {
+      val entities = Foldable[List].foldMap(a.events)(TabledEntity.forEvent(_))
+      Batched(ListOfList.of(List(a.events)), ListOfList.of(List(a.parseFailures)), entities, a.countBytes, Vector(a.token))
+    }
+    def weightOf(a: ParseResult): Long =
+      a.countBytes
   }
 
 }

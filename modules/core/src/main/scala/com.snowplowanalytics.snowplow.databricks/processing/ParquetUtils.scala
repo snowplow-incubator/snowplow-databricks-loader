@@ -27,6 +27,7 @@ import com.snowplowanalytics.iglu.schemaddl.parquet.{Caster, Type}
 import com.snowplowanalytics.snowplow.analytics.scalasdk.Event
 import com.snowplowanalytics.snowplow.badrows.{BadRow, Processor => BadProcessor}
 import com.snowplowanalytics.snowplow.loaders.transform.{NonAtomicFields, Transform}
+import com.snowplowanalytics.snowplow.sinks.ListOfList
 import com.snowplowanalytics.snowplow.runtime.syntax.foldable._
 
 private[processing] object ParquetUtils {
@@ -47,11 +48,11 @@ private[processing] object ParquetUtils {
 
   def transform[F[_]: Sync](
     badProcessor: BadProcessor,
-    events: Vector[Event],
+    events: ListOfList[Event],
     entities: NonAtomicFields.Result,
     loadTstamp: Instant
   ): F[TransformResult] =
-    Foldable[Vector]
+    Foldable[ListOfList]
       .traverseSeparateUnordered(events) { event =>
         Sync[F].delay {
           Transform
