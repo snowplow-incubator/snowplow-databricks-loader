@@ -17,7 +17,7 @@ object Dependencies {
     val decline          = "2.4.1"
     val circe            = "0.14.3"
     val betterMonadicFor = "0.3.1"
-    val parquet4s        = "2.13.0"
+    val parquet4s        = "2.14.1"
 
     // java
     val slf4j    = "2.0.7"

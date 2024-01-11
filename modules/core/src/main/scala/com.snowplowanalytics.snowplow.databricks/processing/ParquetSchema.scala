@@ -40,7 +40,7 @@ private[processing] object ParquetSchema {
   private def asParquetField(ddlField: Field): PType = {
     val normalizedName = Field.normalize(ddlField).name
     fieldType(ddlField.fieldType)
-      .withRequired(ddlField.nullability.nullable)
+      .withRequired(ddlField.nullability.required)
       .apply(normalizedName)
   }
 

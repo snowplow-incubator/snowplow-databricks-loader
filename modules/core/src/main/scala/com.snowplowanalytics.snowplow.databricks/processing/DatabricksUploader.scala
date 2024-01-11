@@ -39,7 +39,7 @@ object DatabricksUploader {
         uuid <- UUIDGen[F].randomUUID
         partition = timePartition(loadTstamp)
         name      = filename(config, loadTstamp, uuid)
-        uri       = config.host / "api" / "2.0" / "fs" / "Volumes" / config.catalog / config.schema / config.volume / partition / name
+        uri = config.host / "api" / "2.0" / "fs" / "files" / "Volumes" / config.catalog / config.schema / config.volume / partition / name
         req = Request[F](
                 method  = Method.PUT,
                 uri     = uri,
@@ -48,6 +48,14 @@ object DatabricksUploader {
               )
         _ <- Logger[F].info(show"Uploading file of size ${bytes.limit} to $uri")
         status <- client.status(req)
+        /*
+        status <- client.run(req).use[org.http4s.Status] { resp =>
+          resp.body.compile.toVector.flatMap { bytes =>
+            val str = new String(bytes.toArray, java.nio.charset.StandardCharsets.UTF_8)
+            Logger[F].info(str)
+          }.as(resp.status)
+        }
+         */
         _ <- raiseForStatus[F](status)
       } yield ()
   }
@@ -62,7 +70,7 @@ object DatabricksUploader {
   ): String = {
     val ext    = config.compression.getExtension
     val prefix = secondFormatter.format(loadTstamp)
-    s"$prefix-$uuid.$ext.parquet"
+    s"$prefix-$uuid$ext.parquet"
   }
 
   private def timePartition(loadTstamp: Instant): String = {
