@@ -49,7 +49,7 @@ object Environment {
       httpClient <- BlazeClientBuilder[F].withExecutionContext(global.compute).resource
       metrics <- Resource.eval(Metrics.build(config.main.monitoring.metrics))
       sourceAndAck <- Resource.eval(toSource(config.main.input))
-      databricks = DatabricksUploader.impl[F](config.main.output.good, httpClient)
+      databricks <- Resource.eval(DatabricksUploader.build[F](config.main.output.good))
       _ <- HealthProbe.resource(config.main.monitoring.healthProbe.port, sourceIsHealthy(config.main.monitoring.healthProbe, sourceAndAck))
     } yield Environment(
       appInfo     = appInfo,

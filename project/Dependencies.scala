@@ -20,12 +20,13 @@ object Dependencies {
     val parquet4s        = "2.14.1"
 
     // java
-    val slf4j    = "2.0.7"
-    val azureSdk = "1.9.1"
-    val sentry   = "6.25.2"
-    val jaxb     = "2.3.1"
-    val awsSdk2  = "2.20.135"
-    val hadoop   = "3.3.6"
+    val databricks = "0.17.0"
+    val slf4j      = "2.0.7"
+    val azureSdk   = "1.9.1"
+    val sentry     = "6.25.2"
+    val jaxb       = "2.3.1"
+    val awsSdk2    = "2.20.135"
+    val hadoop     = "3.3.6"
 
     // Snowplow
     val streams    = "0.2.0"
@@ -45,11 +46,12 @@ object Dependencies {
   val parquet4s         = "com.github.mjakubowski84" %% "parquet4s-fs2"        % V.parquet4s
 
   // java
-  val slf4j         = "org.slf4j"              % "slf4j-simple"   % V.slf4j
-  val azureIdentity = "com.azure"              % "azure-identity" % V.azureSdk
-  val sentry        = "io.sentry"              % "sentry"         % V.sentry
-  val jaxb          = "javax.xml.bind"         % "jaxb-api"       % V.jaxb
-  val stsSdk2       = "software.amazon.awssdk" % "sts"            % V.awsSdk2
+  val databricks    = "com.databricks"         % "databricks-sdk-java" % V.databricks
+  val slf4j         = "org.slf4j"              % "slf4j-simple"        % V.slf4j
+  val azureIdentity = "com.azure"              % "azure-identity"      % V.azureSdk
+  val sentry        = "io.sentry"              % "sentry"              % V.sentry
+  val jaxb          = "javax.xml.bind"         % "jaxb-api"            % V.jaxb
+  val stsSdk2       = "software.amazon.awssdk" % "sts"                 % V.awsSdk2
   val hadoopClient = ("org.apache.hadoop" % "hadoop-client" % V.hadoop)
     .exclude("com.jcraft", "jsch")
     .exclude("org.apache.zookeeper", "zookeeper")
@@ -72,6 +74,7 @@ object Dependencies {
     loaders,
     runtime,
     igluClientHttp4s,
+    databricks,
     hadoopClient,
     parquet4s,
     catsRetry,

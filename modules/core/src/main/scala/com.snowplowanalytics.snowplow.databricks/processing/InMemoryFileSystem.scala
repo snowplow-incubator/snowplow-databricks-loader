@@ -13,17 +13,16 @@ import org.apache.hadoop.fs.{CreateFlag, FSDataInputStream, FSDataOutputStream, 
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.util.Progressable
 
-import java.io.{ByteArrayOutputStream, OutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, OutputStream}
 import java.net.URI
-import java.nio.ByteBuffer
 import java.util.EnumSet
 
 import com.snowplowanalytics.snowplow.databricks.Config
 
 class InMemoryFileSystem extends FileSystem { fs =>
-  @volatile private var outputBytes: ByteBuffer = _
+  @volatile private var inputStream: ByteArrayInputStream = _
 
-  def getBytes: ByteBuffer = outputBytes
+  def getBytes: ByteArrayInputStream = inputStream
 
   override def create(
     f: Path,
@@ -38,7 +37,7 @@ class InMemoryFileSystem extends FileSystem { fs =>
     val out: OutputStream = new ByteArrayOutputStream(estimateFileSize) { o =>
       override def close(): Unit = {
         super.close()
-        fs.outputBytes = ByteBuffer.wrap(o.buf, 0, o.count)
+        fs.inputStream = new ByteArrayInputStream(o.buf, 0, o.count)
       }
     }
     new FSDataOutputStream(out, fs.statistics)
@@ -97,7 +96,7 @@ class InMemoryFileSystem extends FileSystem { fs =>
 
 object InMemoryFileSystem {
 
-  case class Configured[F[_]](hadoopConf: Configuration, getBytes: F[ByteBuffer])
+  case class Configured[F[_]](hadoopConf: Configuration, getBytes: F[ByteArrayInputStream])
 
   private val scheme        = "inmem"
   private val baseUri       = s"$scheme:///"
