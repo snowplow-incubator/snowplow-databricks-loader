@@ -8,17 +8,14 @@
 package com.snowplowanalytics.snowplow.databricks.processing
 
 import cats.implicits._
-import cats.ApplicativeThrow
 import cats.effect.Sync
-import cats.effect.std.UUIDGen
-import fs2.{Chunk, Stream}
-import org.http4s.client.Client
-import org.http4s.{AuthScheme, Credentials, Headers, MediaType, Method, Request, Status}
-import org.http4s.headers.{Authorization, `Content-Type`}
+import com.databricks.sdk.WorkspaceClient
+import com.databricks.sdk.core.{DatabricksConfig, UserAgent}
+import com.databricks.sdk.service.files.FilesAPI
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
-import java.nio.ByteBuffer
+import java.io.ByteArrayInputStream
 import java.util.UUID
 import java.time.{Instant, ZoneOffset}
 import java.time.format.DateTimeFormatter
@@ -26,39 +23,35 @@ import java.time.format.DateTimeFormatter
 import com.snowplowanalytics.snowplow.databricks.Config
 
 trait DatabricksUploader[F[_]] {
-  def upload(bytes: ByteBuffer, loadTsamp: Instant): F[Unit]
+  def upload(bytes: ByteArrayInputStream, loadTsamp: Instant): F[Unit]
 }
 
 object DatabricksUploader {
 
   private implicit def logger[F[_]: Sync]: Logger[F] = Slf4jLogger.getLogger[F]
 
-  def impl[F[_]: Sync](config: Config.Databricks, client: Client[F]): DatabricksUploader[F] = new DatabricksUploader[F] {
-    def upload(bytes: ByteBuffer, loadTstamp: Instant): F[Unit] =
+  def build[F[_]: Sync](config: Config.Databricks): F[DatabricksUploader[F]] =
+    for {
+      _ <- Sync[F].delay(UserAgent.withProduct("snowplow-loader", "0.0.0"))
+      ws <- Sync[F].delay(new WorkspaceClient(databricksConfig(config)))
+    } yield impl(config, ws.files)
+
+  def impl[F[_]: Sync](config: Config.Databricks, api: FilesAPI): DatabricksUploader[F] = new DatabricksUploader[F] {
+    def upload(bytes: ByteArrayInputStream, loadTstamp: Instant): F[Unit] =
       for {
-        uuid <- UUIDGen[F].randomUUID
+        uuid <- Sync[F].delay(UUID.randomUUID)
         partition = timePartition(loadTstamp)
         name      = filename(config, loadTstamp, uuid)
-        uri = config.host / "api" / "2.0" / "fs" / "files" / "Volumes" / config.catalog / config.schema / config.volume / partition / name
-        req = Request[F](
-                method  = Method.PUT,
-                uri     = uri,
-                headers = headers(config),
-                body    = Stream.chunk(Chunk.byteBuffer(bytes))
-              )
-        _ <- Logger[F].info(show"Uploading file of size ${bytes.limit} to $uri")
-        status <- client.status(req)
-        /*
-        status <- client.run(req).use[org.http4s.Status] { resp =>
-          resp.body.compile.toVector.flatMap { bytes =>
-            val str = new String(bytes.toArray, java.nio.charset.StandardCharsets.UTF_8)
-            Logger[F].info(str)
-          }.as(resp.status)
-        }
-         */
-        _ <- raiseForStatus[F](status)
+        path      = s"Volumes/${config.catalog}/${config.schema}/${config.volume}/$partition/$name"
+        _ <- Logger[F].info(show"Uploading file of size ${bytes.available} to $path")
+        _ <- Sync[F].blocking(api.upload(path, bytes))
       } yield ()
   }
+
+  private def databricksConfig(config: Config.Databricks): DatabricksConfig =
+    new DatabricksConfig()
+      .setHost(config.host)
+      .setToken(config.token)
 
   private val dayFormatter: DateTimeFormatter    = DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneOffset.UTC)
   private val secondFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss").withZone(ZoneOffset.UTC)
@@ -78,15 +71,4 @@ object DatabricksUploader {
     s"load_tstamp_date=$value"
   }
 
-  private def headers(config: Config.Databricks): Headers =
-    Headers(
-      Authorization(Credentials.Token(AuthScheme.Bearer, config.token)),
-      `Content-Type`(MediaType.application.`octet-stream`)
-    )
-
-  private def raiseForStatus[F[_]: ApplicativeThrow](status: Status): F[Unit] =
-    if (status.isSuccess)
-      ApplicativeThrow[F].unit
-    else
-      ApplicativeThrow[F].raiseError(new RuntimeException(s"Unexpected status from Databricks upload: $status"))
 }

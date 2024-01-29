@@ -7,13 +7,11 @@
  */
 package com.snowplowanalytics.snowplow.databricks
 
-import cats.implicits._
 import cats.Id
 import io.circe.Decoder
 import io.circe.generic.extras.semiauto._
 import io.circe.generic.extras.Configuration
 import io.circe.config.syntax._
-import org.http4s.Uri
 import com.comcast.ip4s.Port
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
@@ -38,7 +36,7 @@ object Config {
   case class Output[+Sink](good: Databricks, bad: Sink)
 
   case class Databricks(
-    host: Uri,
+    host: String,
     token: String,
     catalog: String,
     schema: String,
@@ -92,9 +90,6 @@ object Config {
 
   implicit def decoder[Source: Decoder, Sink: Decoder]: Decoder[Config[Source, Sink]] = {
     implicit val configuration = Configuration.default.withDiscriminator("type")
-    implicit val uriDecoder = Decoder.decodeString.emap { str =>
-      Uri.fromString(str).leftMap(_.message)
-    }
     implicit val compressionDecoder = Decoder.decodeString.emapTry { str =>
       Try(CompressionCodecName.valueOf(str.toUpperCase))
     }

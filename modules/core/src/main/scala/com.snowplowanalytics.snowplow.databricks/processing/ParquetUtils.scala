@@ -81,7 +81,7 @@ private[processing] object ParquetUtils {
         case Type.DecimalPrecision.Digits38 =>
           encodeDecimalAsByteArray(unscaled)
       }
-    def timestampValue(v: Instant): Value = LongValue(v.toEpochMilli)
+    def timestampValue(v: Instant): Value = LongValue(v.toEpochMilli * 1000L)
     def dateValue(v: LocalDate): Value    = IntValue(v.toEpochDay.toInt)
     def arrayValue(vs: List[Value]): Value =
       ListParquetRecord(vs: _*)

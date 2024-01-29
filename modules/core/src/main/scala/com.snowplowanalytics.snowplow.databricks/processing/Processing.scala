@@ -17,8 +17,8 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.apache.parquet.schema.MessageType
 import com.github.mjakubowski84.parquet4s.RowParquetRecord
 
+import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
-import java.nio.ByteBuffer
 import java.time.Instant
 
 import com.snowplowanalytics.iglu.client.resolver.registries.{Http4sRegistryLookup, RegistryLookup}
@@ -68,7 +68,7 @@ object Processing {
   )
 
   private case class Serialized(
-    bytes: ByteBuffer,
+    bytes: ByteArrayInputStream,
     goodCount: Long,
     loadTstamp: Instant,
     tokens: Vector[Unique.Token]
@@ -138,7 +138,7 @@ object Processing {
       InMemoryFileSystem.Configured(hadoopConf, getBytes) <- Stream.resource(InMemoryFileSystem.configure(env.batching))
       batch <- in
       _ <- ParquetUtils.write[F](hadoopConf, env.compression, batch.schema, batch.events).unitary
-      bytes <- Stream.eval[F, ByteBuffer](getBytes)
+      bytes <- Stream.eval(getBytes)
     } yield Serialized(bytes, batch.events.length.toLong, batch.loadTstamp, batch.tokens)
   }
 
