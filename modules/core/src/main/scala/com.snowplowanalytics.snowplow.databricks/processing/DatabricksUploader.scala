@@ -23,7 +23,7 @@ import java.time.format.DateTimeFormatter
 import com.snowplowanalytics.snowplow.databricks.Config
 
 trait DatabricksUploader[F[_]] {
-  def upload(bytes: ByteArrayInputStream, loadTsamp: Instant): F[Unit]
+  def upload(bytes: ByteArrayInputStream): F[Unit]
 }
 
 object DatabricksUploader {
@@ -37,12 +37,13 @@ object DatabricksUploader {
     } yield impl(config, ws.files)
 
   def impl[F[_]: Sync](config: Config.Databricks, api: FilesAPI): DatabricksUploader[F] = new DatabricksUploader[F] {
-    def upload(bytes: ByteArrayInputStream, loadTstamp: Instant): F[Unit] =
+    def upload(bytes: ByteArrayInputStream): F[Unit] =
       for {
         uuid <- Sync[F].delay(UUID.randomUUID)
-        partition = timePartition(loadTstamp)
-        name      = filename(config, loadTstamp, uuid)
-        path      = s"Volumes/${config.catalog}/${config.schema}/${config.volume}/$partition/$name"
+        now <- Sync[F].realTimeInstant
+        partition = timePartition(now)
+        name      = filename(config, now, uuid)
+        path      = s"Volumes/${config.catalog}/${config.schema}/${config.volume}/events/$partition/$name"
         _ <- Logger[F].info(show"Uploading file of size ${bytes.available} to $path")
         _ <- Sync[F].blocking(api.upload(path, bytes))
       } yield ()

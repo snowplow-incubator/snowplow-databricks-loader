@@ -49,15 +49,14 @@ private[processing] object ParquetUtils {
   def transform[F[_]: Sync](
     badProcessor: BadProcessor,
     events: ListOfList[Event],
-    entities: NonAtomicFields.Result,
-    loadTstamp: Instant
+    entities: NonAtomicFields.Result
   ): F[TransformResult] =
     Foldable[ListOfList]
       .traverseSeparateUnordered(events) { event =>
         Sync[F].delay {
           Transform
             .transformEvent(badProcessor, caster, event, entities)
-            .map(vs => rowParquetRecord(vs).prepended("load_tstamp", caster.timestampValue(loadTstamp)))
+            .map(rowParquetRecord(_))
         }
       }
       .map { case (bad, good) =>
