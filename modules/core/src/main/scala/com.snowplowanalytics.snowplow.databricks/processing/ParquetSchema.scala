@@ -35,7 +35,7 @@ private[processing] object ParquetSchema {
    * @note
    *   this is a `val` not a `def` because we use it over and over again.
    */
-  val atomic: List[PType] = AtomicFields.withLoadTstamp.map(asParquetField)
+  val atomic: List[PType] = AtomicFields.static.map(asParquetField)
 
   private def asParquetField(ddlField: Field): PType = {
     val normalizedName = Field.normalize(ddlField).name
