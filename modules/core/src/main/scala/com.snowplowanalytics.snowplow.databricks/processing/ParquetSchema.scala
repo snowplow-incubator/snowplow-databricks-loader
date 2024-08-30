@@ -21,8 +21,8 @@ private[processing] object ParquetSchema {
    *
    * The returned schema includes atomic fields and non-atomic fields but not the load_tstamp column
    */
-  def forBatch(entities: List[Field]): MessageType = {
-    val types = atomic ::: entities.map(asParquetField)
+  def forBatch(entities: Vector[Field]): MessageType = {
+    val types = atomic ++ entities.map(asParquetField)
     Types
       .buildMessage()
       .addFields(types: _*)
@@ -35,7 +35,7 @@ private[processing] object ParquetSchema {
    * @note
    *   this is a `val` not a `def` because we use it over and over again.
    */
-  val atomic: List[PType] = AtomicFields.static.map(asParquetField)
+  val atomic: Vector[PType] = AtomicFields.static.map(asParquetField)
 
   private def asParquetField(ddlField: Field): PType = {
     val normalizedName = Field.normalize(ddlField).name
@@ -76,7 +76,7 @@ private[processing] object ParquetSchema {
     case Type.Timestamp =>
       SchemaDef.primitive(PPrimitive.INT64, logicalTypeAnnotation = Some(PAnnotation.timestampType(true, PAnnotation.TimeUnit.MICROS)))
     case Type.Struct(fields) =>
-      SchemaDef.group(fields.map(asParquetField): _*)
+      SchemaDef.group(fields.toVector.map(asParquetField): _*)
     case Type.Array(element, elNullability) =>
       val listElement = fieldType(element).withRequired(elNullability.required)
       SchemaDef.list(listElement)

@@ -8,7 +8,7 @@
 package com.snowplowanalytics.snowplow.databricks.processing
 
 import cats.implicits._
-import cats.effect.Sync
+import cats.effect.{Async, Sync}
 import com.databricks.sdk.WorkspaceClient
 import com.databricks.sdk.core.{DatabricksConfig, UserAgent}
 import com.databricks.sdk.service.files.FilesAPI
@@ -20,13 +20,16 @@ import java.util.UUID
 import java.time.{Instant, ZoneOffset}
 import java.time.format.DateTimeFormatter
 
-import com.snowplowanalytics.snowplow.databricks.Config
+import com.snowplowanalytics.snowplow.databricks.{Alert, Config, RuntimeService}
+import com.snowplowanalytics.snowplow.runtime.{AppHealth, Retrying}
 
 trait DatabricksUploader[F[_]] {
   def upload(bytes: ByteArrayInputStream): F[Unit]
 }
 
 object DatabricksUploader {
+
+  trait WithHandledErrors[F[_]] extends DatabricksUploader[F]
 
   private implicit def logger[F[_]: Sync]: Logger[F] = Slf4jLogger.getLogger[F]
 
@@ -36,7 +39,25 @@ object DatabricksUploader {
       ws <- Sync[F].delay(new WorkspaceClient(databricksConfig(config)))
     } yield impl(config, ws.files)
 
-  def impl[F[_]: Sync](config: Config.Databricks, api: FilesAPI): DatabricksUploader[F] = new DatabricksUploader[F] {
+  def withHandledErrors[F[_]: Async](
+    underlying: DatabricksUploader[F],
+    appHealth: AppHealth.Interface[F, Alert, RuntimeService],
+    retries: Config.Retries
+  ): WithHandledErrors[F] = new WithHandledErrors[F] {
+    def upload(bytes: ByteArrayInputStream): F[Unit] =
+      Retrying.withRetries(
+        appHealth,
+        retries.transientErrors,
+        retries.setupErrors,
+        RuntimeService.DatabricksUploader,
+        Alert.FailedToUploadFile,
+        isSetupError
+      ) {
+        underlying.upload(bytes)
+      } <* appHealth.beHealthyForSetup
+  }
+
+  private def impl[F[_]: Sync](config: Config.Databricks, api: FilesAPI): DatabricksUploader[F] = new DatabricksUploader[F] {
     def upload(bytes: ByteArrayInputStream): F[Unit] =
       for {
         uuid <- Sync[F].delay(UUID.randomUUID)
@@ -71,5 +92,9 @@ object DatabricksUploader {
     val value = dayFormatter.format(loadTstamp)
     s"load_tstamp_date=$value"
   }
+
+  def isSetupError: PartialFunction[Throwable, String] =
+    // TODO: research the setup errors
+    PartialFunction.empty
 
 }
