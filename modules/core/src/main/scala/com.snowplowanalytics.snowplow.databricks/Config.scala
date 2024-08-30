@@ -19,21 +19,33 @@ import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
 import com.snowplowanalytics.iglu.client.resolver.Resolver.ResolverConfig
-import com.snowplowanalytics.snowplow.runtime.{Metrics => CommonMetrics, Telemetry}
+import com.snowplowanalytics.iglu.core.SchemaCriterion
+import com.snowplowanalytics.snowplow.runtime.{AcceptedLicense, Metrics => CommonMetrics, Retrying, Telemetry, Webhook}
+import com.snowplowanalytics.iglu.core.circe.CirceIgluCodecs.schemaCriterionDecoder
+import com.snowplowanalytics.snowplow.runtime.HealthProbe.decoders._
 
 case class Config[+Source, +Sink](
   input: Source,
   output: Config.Output[Sink],
   batching: Config.Batching,
+  retries: Config.Retries,
   telemetry: Telemetry.Config,
-  monitoring: Config.Monitoring
+  monitoring: Config.Monitoring,
+  license: AcceptedLicense,
+  skipSchemas: List[SchemaCriterion],
+  legacyColumns: List[SchemaCriterion],
+  exitOnMissingIgluSchema: Boolean
 )
 
 object Config {
 
   case class WithIglu[+Source, +Sink](main: Config[Source, Sink], iglu: ResolverConfig)
 
-  case class Output[+Sink](good: Databricks, bad: Sink)
+  case class Output[+Sink](good: Databricks, bad: SinkWithMaxSize[Sink])
+
+  case class SinkWithMaxSize[+Sink](sink: Sink, maxRecordSize: Int)
+
+  case class MaxRecordSize(maxRecordSize: Int)
 
   case class Databricks(
     host: String,
@@ -50,28 +62,14 @@ object Config {
     uploadConcurrency: Int
   )
 
+  case class Retries(
+    setupErrors: Retrying.Config.ForSetup,
+    transientErrors: Retrying.Config.ForTransient
+  )
+
   case class Metrics(
     statsd: Option[CommonMetrics.StatsdConfig]
   )
-
-  private case class StatsdUnresolved(
-    hostname: Option[String],
-    port: Int,
-    tags: Map[String, String],
-    period: FiniteDuration,
-    prefix: String
-  )
-
-  private object Statsd {
-
-    def resolve(statsd: StatsdUnresolved): Option[CommonMetrics.StatsdConfig] =
-      statsd match {
-        case StatsdUnresolved(Some(hostname), port, tags, period, prefix) =>
-          Some(CommonMetrics.StatsdConfig(hostname, port, tags, period, prefix))
-        case StatsdUnresolved(None, _, _, _, _) =>
-          None
-      }
-  }
 
   case class SentryM[M[_]](
     dsn: M[String],
@@ -85,7 +83,8 @@ object Config {
   case class Monitoring(
     metrics: Metrics,
     sentry: Option[Sentry],
-    healthProbe: HealthProbe
+    healthProbe: HealthProbe,
+    webhook: Webhook.Config
   )
 
   implicit def decoder[Source: Decoder, Sink: Decoder]: Decoder[Config[Source, Sink]] = {
@@ -93,11 +92,13 @@ object Config {
     implicit val compressionDecoder = Decoder.decodeString.emapTry { str =>
       Try(CompressionCodecName.valueOf(str.toUpperCase))
     }
-    implicit val databricks    = deriveConfiguredDecoder[Databricks]
-    implicit val output        = deriveConfiguredDecoder[Output[Sink]]
-    implicit val batching      = deriveConfiguredDecoder[Batching]
-    implicit val telemetry     = deriveConfiguredDecoder[Telemetry.Config]
-    implicit val statsdDecoder = deriveConfiguredDecoder[StatsdUnresolved].map(Statsd.resolve(_))
+    implicit val sinkWithMaxSize = for {
+      sink <- Decoder[Sink]
+      maxSize <- deriveConfiguredDecoder[MaxRecordSize]
+    } yield SinkWithMaxSize(sink, maxSize.maxRecordSize)
+    implicit val databricks = deriveConfiguredDecoder[Databricks]
+    implicit val output     = deriveConfiguredDecoder[Output[Sink]]
+    implicit val batching   = deriveConfiguredDecoder[Batching]
     implicit val sentryDecoder = deriveConfiguredDecoder[SentryM[Option]]
       .map[Option[Sentry]] {
         case SentryM(Some(dsn), tags) =>
@@ -105,12 +106,15 @@ object Config {
         case SentryM(None, _) =>
           None
       }
-    implicit val metricsDecoder = deriveConfiguredDecoder[Metrics]
-    implicit val portDecoder = Decoder.decodeInt.emap { port =>
-      Port.fromInt(port).toRight("Invalid port")
-    }
+    implicit val metricsDecoder     = deriveConfiguredDecoder[Metrics]
     implicit val healthProbeDecoder = deriveConfiguredDecoder[HealthProbe]
     implicit val monitoringDecoder  = deriveConfiguredDecoder[Monitoring]
+    implicit val retriesDecoder     = deriveConfiguredDecoder[Retries]
+
+    // TODO add databricks docs
+    implicit val licenseDecoder =
+      AcceptedLicense.decoder(AcceptedLicense.DocumentationLink("https://docs.snowplow.io/limited-use-license-1.0/"))
+
     deriveConfiguredDecoder[Config[Source, Sink]]
   }
 

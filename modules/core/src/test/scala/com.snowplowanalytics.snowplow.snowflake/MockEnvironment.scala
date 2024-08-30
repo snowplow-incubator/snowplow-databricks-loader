@@ -18,7 +18,7 @@ import com.snowplowanalytics.iglu.client.Resolver
 import com.snowplowanalytics.snowplow.sources.{EventProcessingConfig, EventProcessor, SourceAndAck, TokenedEvents}
 import com.snowplowanalytics.snowplow.sinks.Sink
 import com.snowplowanalytics.snowplow.databricks.processing.DatabricksUploader
-import com.snowplowanalytics.snowplow.runtime.AppInfo
+import com.snowplowanalytics.snowplow.runtime.{AppInfo, AppHealth}
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import java.io.ByteArrayInputStream
@@ -32,10 +32,11 @@ object MockEnvironment {
     case class Checkpointed(tokens: List[Unique.Token]) extends Action
     case class SentToBad(count: Long) extends Action
     case object UploadedFile extends Action
-
     case class AddedGoodCountMetric(count: Long) extends Action
     case class AddedBadCountMetric(count: Long) extends Action
     case class SetLatencyMetric(millis: Long) extends Action
+    case class BecameUnhealthy(service: RuntimeService) extends Action
+    case class BecameHealthy(service: RuntimeService) extends Action
   }
   import Action._
 
@@ -59,12 +60,16 @@ object MockEnvironment {
         httpClient = testHttpClient,
         databricks = testDatabricksUploader(state),
         metrics    = testMetrics(state),
+        appHealth            = testAppHealth(state),
         batching = Config.Batching(
           maxBytes          = 16000000,
           maxDelay          = 10.seconds,
           uploadConcurrency = 1
         ),
-        compression = CompressionCodecName.SNAPPY
+        compression = CompressionCodecName.SNAPPY,
+        badRowMaxSize           = 1000000,
+        schemasToSkip           = List.empty,
+        exitOnMissingIgluSchema = false
       )
       MockEnvironment(state, env)
     }
@@ -76,7 +81,7 @@ object MockEnvironment {
     def cloud       = "OnPrem"
   }
 
-  private def testDatabricksUploader(state: Ref[IO, Vector[Action]]): DatabricksUploader[IO] = new DatabricksUploader[IO] {
+  private def testDatabricksUploader(state: Ref[IO, Vector[Action]]): DatabricksUploader.WithHandledErrors[IO] = new DatabricksUploader.WithHandledErrors[IO] {
     def upload(bytes: ByteArrayInputStream): IO[Unit] =
       state.update(_ :+ UploadedFile)
   }
@@ -117,4 +122,16 @@ object MockEnvironment {
 
     def report: Stream[IO, Nothing] = Stream.never[IO]
   }
+
+  private def testAppHealth(ref: Ref[IO, Vector[Action]]): AppHealth.Interface[IO, Alert, RuntimeService] =
+    new AppHealth.Interface[IO, Alert, RuntimeService] {
+      def beHealthyForSetup: IO[Unit] =
+        IO.unit
+      def beUnhealthyForSetup(alert: Alert): IO[Unit] =
+        IO.unit
+      def beHealthyForRuntimeService(service: RuntimeService): IO[Unit] =
+        ref.update(_ :+ BecameHealthy(service))
+      def beUnhealthyForRuntimeService(service: RuntimeService): IO[Unit] =
+        ref.update(_ :+ BecameUnhealthy(service))
+    }
 }

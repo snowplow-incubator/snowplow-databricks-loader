@@ -8,7 +8,6 @@
 package com.snowplowanalytics.snowplow.databricks
 
 import cats.implicits._
-import cats.Functor
 import cats.effect.{Async, Resource, Sync}
 import cats.effect.unsafe.implicits.global
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
@@ -17,10 +16,11 @@ import org.http4s.blaze.client.BlazeClientBuilder
 import io.sentry.Sentry
 
 import com.snowplowanalytics.iglu.client.resolver.Resolver
+import com.snowplowanalytics.iglu.core.SchemaCriterion
 import com.snowplowanalytics.snowplow.sources.SourceAndAck
 import com.snowplowanalytics.snowplow.sinks.Sink
 import com.snowplowanalytics.snowplow.databricks.processing.DatabricksUploader
-import com.snowplowanalytics.snowplow.runtime.{AppInfo, HealthProbe}
+import com.snowplowanalytics.snowplow.runtime.{AppHealth, AppInfo, HealthProbe, Webhook}
 
 case class Environment[F[_]](
   appInfo: AppInfo,
@@ -28,10 +28,14 @@ case class Environment[F[_]](
   badSink: Sink[F],
   resolver: Resolver[F],
   httpClient: Client[F],
-  databricks: DatabricksUploader[F],
+  databricks: DatabricksUploader.WithHandledErrors[F],
   metrics: Metrics[F],
+  appHealth: AppHealth.Interface[F, Alert, RuntimeService],
   batching: Config.Batching,
-  compression: CompressionCodecName
+  compression: CompressionCodecName,
+  badRowMaxSize: Int,
+  schemasToSkip: List[SchemaCriterion],
+  exitOnMissingIgluSchema: Boolean
 )
 
 object Environment {
@@ -44,23 +48,32 @@ object Environment {
   ): Resource[F, Environment[F]] =
     for {
       _ <- enableSentry[F](appInfo, config.main.monitoring.sentry)
-      resolver <- mkResolver[F](config.iglu)
-      badSink <- toSink(config.main.output.bad)
-      httpClient <- BlazeClientBuilder[F].withExecutionContext(global.compute).resource
-      metrics <- Resource.eval(Metrics.build(config.main.monitoring.metrics))
       sourceAndAck <- Resource.eval(toSource(config.main.input))
+      sourceReporter = sourceAndAck.isHealthy(config.main.monitoring.healthProbe.unhealthyLatency).map(_.showIfUnhealthy)
+      appHealth <- Resource.eval(AppHealth.init[F, Alert, RuntimeService](List(sourceReporter)))
+      resolver <- mkResolver[F](config.iglu)
+      httpClient <- BlazeClientBuilder[F].withExecutionContext(global.compute).resource
+      _ <- HealthProbe.resource(config.main.monitoring.healthProbe.port, appHealth)
+      _ <- Webhook.resource(config.main.monitoring.webhook, appInfo, httpClient, appHealth)
+      badSink <-
+        toSink(config.main.output.bad.sink).onError(_ => Resource.eval(appHealth.beUnhealthyForRuntimeService(RuntimeService.BadSink)))
+      metrics <- Resource.eval(Metrics.build(config.main.monitoring.metrics))
       databricks <- Resource.eval(DatabricksUploader.build[F](config.main.output.good))
-      _ <- HealthProbe.resource(config.main.monitoring.healthProbe.port, sourceIsHealthy(config.main.monitoring.healthProbe, sourceAndAck))
+      databricksWrapped = DatabricksUploader.withHandledErrors(databricks, appHealth, config.main.retries)
     } yield Environment(
-      appInfo     = appInfo,
-      source      = sourceAndAck,
-      badSink     = badSink,
-      resolver    = resolver,
-      httpClient  = httpClient,
-      databricks  = databricks,
-      metrics     = metrics,
-      batching    = config.main.batching,
-      compression = config.main.output.good.compression
+      appInfo                 = appInfo,
+      source                  = sourceAndAck,
+      badSink                 = badSink,
+      resolver                = resolver,
+      httpClient              = httpClient,
+      databricks              = databricksWrapped,
+      metrics                 = metrics,
+      appHealth               = appHealth,
+      batching                = config.main.batching,
+      compression             = config.main.output.good.compression,
+      badRowMaxSize           = config.main.output.bad.maxRecordSize,
+      schemasToSkip           = config.main.skipSchemas,
+      exitOnMissingIgluSchema = config.main.exitOnMissingIgluSchema
     )
 
   private def enableSentry[F[_]: Sync](appInfo: AppInfo, config: Option[Config.Sentry]): Resource[F, Unit] =
@@ -82,12 +95,6 @@ object Environment {
         }
       case None =>
         Resource.unit[F]
-    }
-
-  private def sourceIsHealthy[F[_]: Functor](config: Config.HealthProbe, source: SourceAndAck[F]): F[HealthProbe.Status] =
-    source.isHealthy(config.unhealthyLatency).map {
-      case SourceAndAck.Healthy              => HealthProbe.Healthy
-      case unhealthy: SourceAndAck.Unhealthy => HealthProbe.Unhealthy(unhealthy.show)
     }
 
   private def mkResolver[F[_]: Async](resolverConfig: Resolver.ResolverConfig): Resource[F, Resolver[F]] =

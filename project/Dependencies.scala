@@ -11,26 +11,25 @@ object Dependencies {
 
   object V {
     // Scala
-    val catsEffect       = "3.5.0"
-    val catsRetry        = "3.1.0"
-    val http4s           = "0.23.15"
+    val catsEffect       = "3.5.4"
+    val http4s           = "0.23.16"
     val decline          = "2.4.1"
-    val circe            = "0.14.3"
+    val circe            = "0.14.4"
     val betterMonadicFor = "0.3.1"
-    val parquet4s        = "2.14.1"
+    val parquet4s        = "2.19.0"
 
     // java
-    val databricks = "0.17.0"
-    val slf4j      = "2.0.7"
-    val azureSdk   = "1.9.1"
-    val sentry     = "6.25.2"
+    val databricks = "0.30.0"
+    val slf4j      = "2.0.16"
+    val azureSdk   = "1.13.2"
+    val sentry     = "7.14.0"
     val jaxb       = "2.3.1"
-    val awsSdk2    = "2.20.135"
-    val hadoop     = "3.3.6"
+    val awsSdk2    = "2.27.16"
+    val hadoop     = "3.4.0"
 
     // Snowplow
-    val streams    = "0.2.0"
-    val igluClient = "3.1.0"
+    val streams    = "0.8.0-M2"
+    val igluClient = "3.1.1"
 
     // tests
     val specs2           = "4.20.0"
@@ -38,12 +37,12 @@ object Dependencies {
 
   }
 
-  val catsRetry         = "com.github.cb372"         %% "cats-retry"           % V.catsRetry
-  val blazeClient       = "org.http4s"               %% "http4s-blaze-client"  % V.http4s
-  val decline           = "com.monovore"             %% "decline-effect"       % V.decline
-  val circeGenericExtra = "io.circe"                 %% "circe-generic-extras" % V.circe
-  val betterMonadicFor  = "com.olegpy"               %% "better-monadic-for"   % V.betterMonadicFor
-  val parquet4s         = "com.github.mjakubowski84" %% "parquet4s-fs2"        % V.parquet4s
+  val blazeClient       = "org.http4s"   %% "http4s-blaze-client"  % V.http4s
+  val decline           = "com.monovore" %% "decline-effect"       % V.decline
+  val circeGenericExtra = "io.circe"     %% "circe-generic-extras" % V.circe
+  val betterMonadicFor  = "com.olegpy"   %% "better-monadic-for"   % V.betterMonadicFor
+  val parquet4s = ("com.github.mjakubowski84" %% "parquet4s-fs2" % V.parquet4s)
+    .exclude("com.github.luben", "zstd-jni")
 
   // java
   val databricks    = "com.databricks"         % "databricks-sdk-java" % V.databricks
@@ -77,7 +76,6 @@ object Dependencies {
     databricks,
     hadoopClient,
     parquet4s,
-    catsRetry,
     blazeClient,
     decline,
     sentry,

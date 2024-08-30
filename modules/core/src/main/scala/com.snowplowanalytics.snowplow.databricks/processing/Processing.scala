@@ -12,6 +12,7 @@ import cats.{Applicative, Foldable}
 import cats.effect.{Async, Sync}
 import cats.effect.kernel.Unique
 import fs2.{Chunk, Pipe, Stream}
+import io.circe.syntax._
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.apache.parquet.schema.MessageType
@@ -26,10 +27,10 @@ import com.snowplowanalytics.snowplow.badrows.{BadRow, Processor => BadRowProces
 import com.snowplowanalytics.snowplow.badrows.Payload.{RawPayload => BadRowRawPayload}
 import com.snowplowanalytics.snowplow.sources.{EventProcessingConfig, EventProcessor, TokenedEvents}
 import com.snowplowanalytics.snowplow.sinks.ListOfList
-import com.snowplowanalytics.snowplow.loaders.transform.{NonAtomicFields, SchemaSubVersion, TabledEntity}
+import com.snowplowanalytics.snowplow.loaders.transform.{BadRowsSerializer, NonAtomicFields, SchemaSubVersion, TabledEntity}
 import com.snowplowanalytics.snowplow.runtime.processing.BatchUp
 import com.snowplowanalytics.snowplow.runtime.syntax.foldable._
-import com.snowplowanalytics.snowplow.databricks.{Environment, Metrics}
+import com.snowplowanalytics.snowplow.databricks.{Environment, Metrics, RuntimeService}
 
 object Processing {
 
@@ -80,7 +81,7 @@ object Processing {
       .through(parseBytes(badProcessor))
       .through(BatchUp.withTimeout(env.batching.maxBytes.toLong, env.batching.maxDelay))
       .through(transform(badProcessor, env))
-      .through(sendFailedEvents(env))
+      .through(sendFailedEvents(env, badProcessor))
       .through(setBadMetric(env))
       .through(writeToParquet(env))
       .through(sendToDatabricks(env))
@@ -123,7 +124,8 @@ object Processing {
     _.evalMap { case Batched(events, parseFailures, entities, numBytes, tokens) =>
       for {
         _ <- Logger[F].debug(s"Processing batch of size ${events.size} and $numBytes bytes")
-        nonAtomicFields <- NonAtomicFields.resolveTypes[F](env.resolver, entities)
+        nonAtomicFields <- NonAtomicFields.resolveTypes[F](env.resolver, entities, env.schemasToSkip)
+        _ <- possiblyExitOnMissingIgluSchema(env, nonAtomicFields)
         ParquetUtils.TransformResult(moreBad, good) <- ParquetUtils.transform[F](badProcessor, events, nonAtomicFields)
         schema = ParquetSchema.forBatch(nonAtomicFields.fields.map(_.mergedField))
       } yield Transformed(good, schema, parseFailures.prepend(moreBad), tokens)
@@ -146,10 +148,14 @@ object Processing {
         batch.pure[F]
     }
 
-  private def sendFailedEvents[F[_]: Applicative, A](env: Environment[F]): Pipe[F, Transformed, Transformed] =
+  private def sendFailedEvents[F[_]: Sync](
+    env: Environment[F],
+    badRowProcessor: BadRowProcessor
+  ): Pipe[F, Transformed, Transformed] =
     _.evalTap { batch =>
       if (batch.badAccumulated.nonEmpty) {
-        val serialized = batch.badAccumulated.mapUnordered(_.compactByteArray)
+        val serialized =
+          batch.badAccumulated.mapUnordered(badRow => BadRowsSerializer.withMaxSize(badRow, badRowProcessor, env.badRowMaxSize))
         env.badSink.sinkSimple(serialized)
       } else Applicative[F].unit
     }
@@ -185,5 +191,18 @@ object Processing {
     def weightOf(a: ParseResult): Long =
       a.countBytes
   }
+
+  private def possiblyExitOnMissingIgluSchema[F[_]: Sync](
+    env: Environment[F],
+    nonAtomicFields: NonAtomicFields.Result
+  ): F[Unit] =
+    if (env.exitOnMissingIgluSchema && nonAtomicFields.igluFailures.nonEmpty) {
+      val base =
+        "Exiting because failed to resolve Iglu schemas.  Either check the configuration of the Iglu repos, or set the `skipSchemas` config option, or set `exitOnMissingIgluSchema` to false.\n"
+      val msg = nonAtomicFields.igluFailures.map(_.failure.asJson.noSpaces).mkString(base, "\n", "")
+      Logger[F].error(base) *> env.appHealth.beUnhealthyForRuntimeService(RuntimeService.Iglu) *> Sync[F].raiseError(
+        new RuntimeException(msg)
+      )
+    } else Applicative[F].unit
 
 }

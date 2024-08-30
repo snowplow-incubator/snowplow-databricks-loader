@@ -8,6 +8,7 @@
 package com.snowplowanalytics.snowplow.databricks.processing
 
 import cats.Foldable
+import cats.data.NonEmptyVector
 import cats.implicits._
 import cats.effect.Sync
 import io.circe.Json
@@ -82,13 +83,13 @@ private[processing] object ParquetUtils {
       }
     def timestampValue(v: Instant): Value = LongValue(v.toEpochMilli * 1000L)
     def dateValue(v: LocalDate): Value    = IntValue(v.toEpochDay.toInt)
-    def arrayValue(vs: List[Value]): Value =
+    def arrayValue(vs: Vector[Value]): Value =
       ListParquetRecord(vs: _*)
-    def structValue(vs: List[Caster.NamedValue[Value]]): Value =
-      rowParquetRecord(vs)
+    def structValue(vs: NonEmptyVector[Caster.NamedValue[Value]]): Value =
+      rowParquetRecord(vs.toVector)
   }
 
-  private def rowParquetRecord(vs: List[Caster.NamedValue[Value]]): RowParquetRecord = {
+  private def rowParquetRecord(vs: Vector[Caster.NamedValue[Value]]): RowParquetRecord = {
     val elements = vs.map(v => v.name -> v.value)
     RowParquetRecord(elements: _*)
   }
