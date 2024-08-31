@@ -1,4 +1,8 @@
 {
+  "license": {
+    "accept": true
+  }
+
   "input": {
     "streamName": "snowplow-enriched-events"
   }
@@ -13,7 +17,8 @@
       "volume": "snowplow"
     }
 
-    "bad": null # TODO need kinesis sink
-
+    "bad": {
+      "streamName": "bad"
+    }
   }
 }

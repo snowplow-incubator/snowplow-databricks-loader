@@ -1,6 +1,10 @@
 {
+  "license": {
+    "accept": true
+  }
+
   "input": {
-    "subscription": "projects/myproject/subscriptions/snowplow-enriched"
+    "subscription": "projects/my-project/subscriptions/snowplow-enriched"
   }
 
   "output": {
@@ -14,7 +18,7 @@
     }
 
     "bad": {
-      "topic": "projects/myproject/topics/snowplow-bad"
+      "topic": "projects/my-project/topics/snowplow-bad"
     }
 
   }
