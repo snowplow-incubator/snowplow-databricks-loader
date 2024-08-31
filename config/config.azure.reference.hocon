@@ -1,4 +1,9 @@
 {
+  # -- Full license test available in LICENSE.md
+  "license" {
+    "accept": true
+  }
+
   "input": {
     # -- kafka topic name for the source of enriched events
     "topicName": "sp-dev-enriched"
@@ -64,6 +69,37 @@
     "uploadConcurrency":  1
   }
 
+  # Retry configuration for BigQuery operation failures
+  "retries": {
+
+    # -- Configures exponential backoff on errors related to how BigQuery is set up for this loader.
+    # -- Examples include authentication errors and permissions errors.
+    # -- This class of errors are reported periodically to the monitoring webhook.
+    "setupErrors": {
+      "delay": "30 seconds"
+    }
+
+    # -- Configures exponential backoff errors that are likely to be transient.
+    # -- Examples include server errors and network errors
+    "transientErrors": {
+      "delay": "1 second"
+      "attempts": 5
+    }
+  }
+
+  # -- Schemas that won't be loaded to BigQuery. Optional, default value []
+  "skipSchemas": [
+    "iglu:com.acme/skipped1/jsonschema/1-0-0",
+    "iglu:com.acme/skipped2/jsonschema/1-0-*",
+    "iglu:com.acme/skipped3/jsonschema/1-*-*",
+    "iglu:com.acme/skipped4/jsonschema/*-*-*"
+  ]
+
+  # -- Whether the loader should crash and exit if it fails to resolve an Iglu Schema.
+  # -- We recommend `true` because Snowplow enriched events have already passed validation, so a missing schema normally
+  # -- indicates an error that needs addressing.
+  # -- Change to `false` so events go the failed events stream instead of crashing the loader.
+  "exitOnMissingIgluSchema": true
 
   "monitoring": {
     "metrics": {
@@ -94,6 +130,18 @@
       "tags": {
         "myTag": "xyz"
       }
+    }
+
+    # -- Report alerts and heartbeats to the webhook
+    "webhook": {
+      # URL of a server listening for the webhook
+      "endpoint": "https://webhook.acme.com",
+      # Set of arbitrary key-value pairs attached to the payload
+      "tags": {
+        "pipeline": "production"
+      }
+      # How often to send the heartbeat event
+      "heartbeat": "60.minutes"
     }
   }
 

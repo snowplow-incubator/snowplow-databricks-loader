@@ -18,7 +18,7 @@ import com.snowplowanalytics.iglu.client.Resolver
 import com.snowplowanalytics.snowplow.sources.{EventProcessingConfig, EventProcessor, SourceAndAck, TokenedEvents}
 import com.snowplowanalytics.snowplow.sinks.Sink
 import com.snowplowanalytics.snowplow.databricks.processing.DatabricksUploader
-import com.snowplowanalytics.snowplow.runtime.{AppInfo, AppHealth}
+import com.snowplowanalytics.snowplow.runtime.{AppHealth, AppInfo}
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import java.io.ByteArrayInputStream
@@ -60,13 +60,13 @@ object MockEnvironment {
         httpClient = testHttpClient,
         databricks = testDatabricksUploader(state),
         metrics    = testMetrics(state),
-        appHealth            = testAppHealth(state),
+        appHealth  = testAppHealth(state),
         batching = Config.Batching(
           maxBytes          = 16000000,
           maxDelay          = 10.seconds,
           uploadConcurrency = 1
         ),
-        compression = CompressionCodecName.SNAPPY,
+        compression             = CompressionCodecName.SNAPPY,
         badRowMaxSize           = 1000000,
         schemasToSkip           = List.empty,
         exitOnMissingIgluSchema = false
@@ -81,10 +81,11 @@ object MockEnvironment {
     def cloud       = "OnPrem"
   }
 
-  private def testDatabricksUploader(state: Ref[IO, Vector[Action]]): DatabricksUploader.WithHandledErrors[IO] = new DatabricksUploader.WithHandledErrors[IO] {
-    def upload(bytes: ByteArrayInputStream): IO[Unit] =
-      state.update(_ :+ UploadedFile)
-  }
+  private def testDatabricksUploader(state: Ref[IO, Vector[Action]]): DatabricksUploader.WithHandledErrors[IO] =
+    new DatabricksUploader.WithHandledErrors[IO] {
+      def upload(bytes: ByteArrayInputStream): IO[Unit] =
+        state.update(_ :+ UploadedFile)
+    }
 
   private def testSourceAndAck(inputs: List[TokenedEvents], state: Ref[IO, Vector[Action]]): SourceAndAck[IO] =
     new SourceAndAck[IO] {

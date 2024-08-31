@@ -41,7 +41,9 @@ object BuildSettings {
   lazy val appSettings = Seq(
     buildInfoKeys := Seq[BuildInfoKey](dockerAlias, name, version),
     buildInfoPackage := "com.snowplowanalytics.snowplow.databricks",
-    buildInfoOptions += BuildInfoOption.Traits("com.snowplowanalytics.snowplow.runtime.AppInfo")
+    buildInfoOptions += BuildInfoOption.Traits("com.snowplowanalytics.snowplow.runtime.AppInfo"),
+    addExampleConfToTestCp,
+    addEnvVarsForTests
   ) ++ commonSettings
 
   lazy val kafkaSettings = appSettings ++ Seq(
@@ -57,6 +59,23 @@ object BuildSettings {
   lazy val kinesisSettings = appSettings ++ Seq(
     name := "databricks-loader-kinesis",
     buildInfoKeys += BuildInfoKey("cloud" -> "AWS")
+  )
+
+  lazy val addExampleConfToTestCp = Test / unmanagedClasspath += {
+    if (baseDirectory.value.getPath.contains("distroless")) {
+      // baseDirectory is like 'root/modules/distroless/module',
+      // we're at 'module' and need to get to 'root/config/'
+      baseDirectory.value.getParentFile.getParentFile.getParentFile / "config"
+    } else {
+      // baseDirectory is like 'root/modules/module',
+      // we're at 'module' and need to get to 'root/config/'
+      baseDirectory.value.getParentFile.getParentFile / "config"
+    }
+  }
+
+  lazy val addEnvVarsForTests = Test / envVars := Map(
+    "DATABRICKS_TOKEN" -> "secret-token",
+    "HOSTNAME" -> "test-hostname"
   )
 
 }

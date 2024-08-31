@@ -64,9 +64,9 @@ object Dependencies {
   val igluClientHttp4s = "com.snowplowanalytics" %% "iglu-scala-client-http4s" % V.igluClient
 
   // tests
-  val specs2            = "org.specs2"    %% "specs2-core"                % V.specs2           % Test
-  val catsEffectSpecs2  = "org.typelevel" %% "cats-effect-testing-specs2" % V.catsEffectSpecs2 % Test
-  val catsEffectTestkit = "org.typelevel" %% "cats-effect-testkit"        % V.catsEffect       % Test
+  val specs2            = "org.specs2"    %% "specs2-core"                % V.specs2
+  val catsEffectSpecs2  = "org.typelevel" %% "cats-effect-testing-specs2" % V.catsEffectSpecs2
+  val catsEffectTestkit = "org.typelevel" %% "cats-effect-testkit"        % V.catsEffect
 
   val coreDependencies = Seq(
     streamsCore,
@@ -80,30 +80,36 @@ object Dependencies {
     decline,
     sentry,
     circeGenericExtra,
-    specs2,
-    catsEffectSpecs2,
-    catsEffectTestkit,
-    slf4j % Test
+    specs2            % Test,
+    catsEffectSpecs2  % Test,
+    catsEffectTestkit % Test,
+    slf4j             % Test
   )
 
   val kafkaDependencies = Seq(
     kafka,
-    slf4j % Runtime,
-    jaxb  % Runtime,
-    azureIdentity
+    azureIdentity,
+    slf4j            % Runtime,
+    jaxb             % Runtime,
+    specs2           % Test,
+    catsEffectSpecs2 % Test
   )
 
   val pubsubDependencies = Seq(
     pubsub,
-    jaxb  % Runtime,
-    slf4j % Runtime
+    jaxb             % Runtime,
+    slf4j            % Runtime,
+    specs2           % Test,
+    catsEffectSpecs2 % Test
   )
 
   val kinesisDependencies = Seq(
     kinesis,
-    jaxb    % Runtime,
-    slf4j   % Runtime,
-    stsSdk2 % Runtime
+    jaxb             % Runtime,
+    slf4j            % Runtime,
+    stsSdk2          % Runtime,
+    specs2           % Test,
+    catsEffectSpecs2 % Test
   )
 
 }
