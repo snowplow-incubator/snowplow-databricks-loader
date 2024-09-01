@@ -48,12 +48,15 @@ object Config {
 
   case class Databricks(
     host: String,
-    token: String,
+    token: Option[String],
+    oauth: Option[DatabricksOAuth],
     catalog: String,
     schema: String,
     volume: String,
     compression: CompressionCodecName
   )
+
+  case class DatabricksOAuth(clientId: String, clientSecret: String)
 
   case class Batching(
     maxBytes: Int,
@@ -95,9 +98,11 @@ object Config {
       sink <- Decoder[Sink]
       maxSize <- deriveConfiguredDecoder[MaxRecordSize]
     } yield SinkWithMaxSize(sink, maxSize.maxRecordSize)
-    implicit val databricks = deriveConfiguredDecoder[Databricks]
-    implicit val output     = deriveConfiguredDecoder[Output[Sink]]
-    implicit val batching   = deriveConfiguredDecoder[Batching]
+    implicit val oauth = deriveConfiguredDecoder[DatabricksOAuth]
+    implicit val databricks =
+      deriveConfiguredDecoder[Databricks].ensure(c => c.token.isDefined || c.oauth.isDefined, "Missing either .token or .oauth")
+    implicit val output   = deriveConfiguredDecoder[Output[Sink]]
+    implicit val batching = deriveConfiguredDecoder[Batching]
     implicit val sentryDecoder = deriveConfiguredDecoder[SentryM[Option]]
       .map[Option[Sentry]] {
         case SentryM(Some(dsn), tags) =>

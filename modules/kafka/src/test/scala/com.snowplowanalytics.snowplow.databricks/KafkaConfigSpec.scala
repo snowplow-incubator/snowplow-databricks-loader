@@ -56,7 +56,8 @@ object KafkaConfigSpec {
     output = Config.Output(
       good = Config.Databricks(
         host        = "https://<identifier>.cloud.databricks.com",
-        token       = "secret-token",
+        token       = None,
+        oauth       = Some(Config.DatabricksOAuth(clientId = "test-client-id", clientSecret = "test-secret")),
         catalog     = "snowplow",
         schema      = "atomic",
         volume      = "snowplow",
