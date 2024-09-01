@@ -44,7 +44,13 @@
       # -- Base URL of the Databricks instance
       "host": "https://<identifier>.cloud.databricks.com"
 
-      # -- Access token to authenticate with Databricks
+      # -- Required if using machine-to-machine oauth authentication
+      "oauth": {
+        "clientId": ${DATABRICKS_CLIENT_ID}
+        "clientSecret": ${DATABRICKS_CLIENT_SECRET}
+      }
+
+      # -- Personal access token (PAT) to authenticate. An alternative to oauth.
       "token": ${DATABRICKS_TOKEN}
 
       # -- Databricks Unity Catalog name

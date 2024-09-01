@@ -12,7 +12,10 @@
 
     "good": {
       "host": "https://<identifier>.cloud.databricks.com"
-      "token": ${DATABRICKS_TOKEN}
+      "oauth": {
+        "clientId": ${DATABRICKS_CLIENT_ID}
+        "clientSecret": ${DATABRICKS_CLIENT_SECRET}
+      }
       "catalog": "snowplow"
       "schema": "atomic"
       "volume": "snowplow"

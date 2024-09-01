@@ -11,6 +11,7 @@ import cats.implicits._
 import cats.effect.{Async, Sync}
 import com.databricks.sdk.WorkspaceClient
 import com.databricks.sdk.core.{DatabricksConfig, UserAgent}
+import com.databricks.sdk.core.error.platform.{NotFound, PermissionDenied, Unauthenticated}
 import com.databricks.sdk.service.files.FilesAPI
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -64,16 +65,22 @@ object DatabricksUploader {
         now <- Sync[F].realTimeInstant
         partition = timePartition(now)
         name      = filename(config, now, uuid)
-        path      = s"Volumes/${config.catalog}/${config.schema}/${config.volume}/events/$partition/$name"
+        path      = s"/Volumes/${config.catalog}/${config.schema}/${config.volume}/events/$partition/$name"
         _ <- Logger[F].info(show"Uploading file of size ${bytes.available} to $path")
         _ <- Sync[F].blocking(api.upload(path, bytes))
       } yield ()
   }
 
-  private def databricksConfig(config: Config.Databricks): DatabricksConfig =
-    new DatabricksConfig()
+  private def databricksConfig(config: Config.Databricks): DatabricksConfig = {
+    val c = new DatabricksConfig()
       .setHost(config.host)
-      .setToken(config.token)
+    config.token.foreach(c.setToken(_))
+    config.oauth.foreach { oauth =>
+      c.setClientId(oauth.clientId)
+      c.setClientSecret(oauth.clientSecret)
+    }
+    c
+  }
 
   private val dayFormatter: DateTimeFormatter    = DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneOffset.UTC)
   private val secondFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss").withZone(ZoneOffset.UTC)
@@ -93,8 +100,15 @@ object DatabricksUploader {
     s"load_tstamp_date=$value"
   }
 
-  def isSetupError: PartialFunction[Throwable, String] =
-    // TODO: research the setup errors
-    PartialFunction.empty
+  def isSetupError: PartialFunction[Throwable, String] = {
+    case _: Unauthenticated =>
+      "Unauthenticated: Invalid connection details"
+    case pd: PermissionDenied =>
+      // PermissionDenied exception messages are clean, short and helpful
+      s"Permission denied by Databricks: ${pd.getMessage}"
+    case nf: NotFound =>
+      // NotFound exception messages are clean, short and helpful
+      s"Not Found: ${nf.getMessage}"
+  }
 
 }
