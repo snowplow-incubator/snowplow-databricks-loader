@@ -64,7 +64,7 @@ jobs:
         id: metaDistroless
         uses: docker/metadata-action@v3
         with:
-          images: "snowplow/sdatabricksloader-${{ matrix.app }}"
+          images: "snowplow/databricks-loader-${{ matrix.app }}"
           tags: |
             type=raw,value=latest-distroless,enable=${{ !contains(github.ref_name, 'rc') }}
             type=raw,value=${{ github.ref_name }}-distroless
@@ -95,10 +95,10 @@ jobs:
         run: sbt "project ${{ matrix.app }}Distroless" docker:publishLocal
       - name: Run Snyk to check for vulnerabilities
         uses: snyk/actions/docker@master
-        # if: ${{ !contains(github.ref_name, 'rc') }} # TODO: uncomment before final release
+        if: ${{ !contains(github.ref_name, 'rc') }}
         with:
           image: "snowplow/databricks-loader-${{ matrix.app }}:${{ github.ref_name }}-distroless"
-          args: "--app-vulns --org=data-cap"
+          args: "--app-vulns --org=99605b41-ca0f-42c9-a9ff-45c201a10a26"
           command: monitor
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
