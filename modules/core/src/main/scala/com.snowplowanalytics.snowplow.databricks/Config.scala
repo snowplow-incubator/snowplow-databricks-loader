@@ -20,7 +20,7 @@ import scala.util.Try
 
 import com.snowplowanalytics.iglu.client.resolver.Resolver.ResolverConfig
 import com.snowplowanalytics.iglu.core.SchemaCriterion
-import com.snowplowanalytics.snowplow.runtime.{AcceptedLicense, Metrics => CommonMetrics, Retrying, Telemetry, Webhook}
+import com.snowplowanalytics.snowplow.runtime.{AcceptedLicense, HttpClient, Metrics => CommonMetrics, Retrying, Telemetry, Webhook}
 import com.snowplowanalytics.iglu.core.circe.CirceIgluCodecs.schemaCriterionDecoder
 import com.snowplowanalytics.snowplow.runtime.HealthProbe.decoders._
 
@@ -33,7 +33,8 @@ case class Config[+Source, +Sink](
   monitoring: Config.Monitoring,
   license: AcceptedLicense,
   skipSchemas: List[SchemaCriterion],
-  exitOnMissingIgluSchema: Boolean
+  exitOnMissingIgluSchema: Boolean,
+  http: Config.Http
 )
 
 object Config {
@@ -89,6 +90,8 @@ object Config {
     webhook: Webhook.Config
   )
 
+  case class Http(client: HttpClient.Config)
+
   implicit def decoder[Source: Decoder, Sink: Decoder]: Decoder[Config[Source, Sink]] = {
     implicit val configuration = Configuration.default.withDiscriminator("type")
     implicit val compressionDecoder = Decoder.decodeString.emapTry { str =>
@@ -114,6 +117,7 @@ object Config {
     implicit val healthProbeDecoder = deriveConfiguredDecoder[HealthProbe]
     implicit val monitoringDecoder  = deriveConfiguredDecoder[Monitoring]
     implicit val retriesDecoder     = deriveConfiguredDecoder[Retries]
+    implicit val httpDecoder        = deriveConfiguredDecoder[Http]
 
     // TODO add databricks docs
     implicit val licenseDecoder =
