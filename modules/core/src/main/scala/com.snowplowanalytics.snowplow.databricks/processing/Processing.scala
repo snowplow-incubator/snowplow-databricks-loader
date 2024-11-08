@@ -120,7 +120,7 @@ object Processing {
     }
 
   /** Transform the Event into values compatible with parquet */
-  private def transform[F[_]: Sync: RegistryLookup](badProcessor: BadRowProcessor, env: Environment[F]): Pipe[F, Batched, Transformed] =
+  private def transform[F[_]: Async: RegistryLookup](badProcessor: BadRowProcessor, env: Environment[F]): Pipe[F, Batched, Transformed] =
     _.evalMap { case Batched(events, parseFailures, entities, numBytes, tokens) =>
       for {
         _ <- Logger[F].debug(s"Processing batch of size ${events.size} and $numBytes bytes")

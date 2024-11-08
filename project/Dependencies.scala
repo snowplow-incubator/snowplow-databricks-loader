@@ -12,7 +12,6 @@ object Dependencies {
   object V {
     // Scala
     val catsEffect       = "3.5.4"
-    val http4s           = "0.23.16"
     val decline          = "2.4.1"
     val circe            = "0.14.4"
     val betterMonadicFor = "0.3.1"
@@ -28,8 +27,8 @@ object Dependencies {
     val hadoop     = "3.4.0"
 
     // Snowplow
-    val streams    = "0.8.0-M2"
-    val igluClient = "3.1.1"
+    val streams    = "0.8.1"
+    val igluClient = "3.2.0"
 
     // tests
     val specs2           = "4.20.0"
@@ -37,7 +36,6 @@ object Dependencies {
 
   }
 
-  val blazeClient       = "org.http4s"   %% "http4s-blaze-client"  % V.http4s
   val decline           = "com.monovore" %% "decline-effect"       % V.decline
   val circeGenericExtra = "io.circe"     %% "circe-generic-extras" % V.circe
   val betterMonadicFor  = "com.olegpy"   %% "better-monadic-for"   % V.betterMonadicFor
@@ -76,7 +74,6 @@ object Dependencies {
     databricks,
     hadoopClient,
     parquet4s,
-    blazeClient,
     decline,
     sentry,
     circeGenericExtra,
