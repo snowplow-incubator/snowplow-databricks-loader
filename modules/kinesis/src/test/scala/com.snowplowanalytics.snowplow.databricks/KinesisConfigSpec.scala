@@ -44,9 +44,9 @@ class KinesisConfigSpec extends Specification with CatsEffect {
 object KinesisConfigSpec {
   private val expectedMinimalConfig = Config[KinesisSourceConfig, KinesisSinkConfig](
     input = KinesisSourceConfig(
-      appName                  = "snowplow-databricks-loader",
-      streamName               = "snowplow-enriched-events",
-      workerIdentifier         = "test-hostname",
+      appName                          = "snowplow-databricks-loader",
+      streamName                       = "snowplow-enriched-events",
+      workerIdentifier                 = "test-hostname",
       initialPosition                  = KinesisSourceConfig.InitialPosition.Latest,
       retrievalMode                    = KinesisSourceConfig.Retrieval.Polling(1000),
       customEndpoint                   = None,

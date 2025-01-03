@@ -37,8 +37,8 @@ class ProcessingSpec extends Specification with CatsEffect {
     Set the latency metric based off the message timestamp $e4
   """
 
-  def e1 =
-    for {
+  def e1 = {
+    val io = for {
       inputs <- generateEvents.take(2).compile.toList
       control <- MockEnvironment.build(inputs)
       _ <- Processing.stream(control.environment).compile.drain
@@ -48,12 +48,16 @@ class ProcessingSpec extends Specification with CatsEffect {
         Action.AddedBadCountMetric(0),
         Action.UploadedFile,
         Action.AddedGoodCountMetric(4),
+        Action.SetE2ELatencyMetric(0),
         Action.Checkpointed(List(inputs(0).ack, inputs(1).ack))
       )
     )
 
-  def e2 =
-    for {
+    TestControl.executeEmbed(io)
+  }
+
+  def e2 = {
+    val io = for {
       inputs <- generateBadlyFormatted.take(3).compile.toList
       control <- MockEnvironment.build(inputs)
       _ <- Processing.stream(control.environment).compile.drain
@@ -67,8 +71,11 @@ class ProcessingSpec extends Specification with CatsEffect {
       )
     )
 
-  def e3 =
-    for {
+    TestControl.executeEmbed(io)
+  }
+
+  def e3 = {
+    val io = for {
       bads <- generateBadlyFormatted.take(3).compile.toList
       goods <- generateEvents.take(3).compile.toList
       inputs = bads.zip(goods).map { case (bad, good) =>
@@ -83,9 +90,13 @@ class ProcessingSpec extends Specification with CatsEffect {
         Action.AddedBadCountMetric(6),
         Action.UploadedFile,
         Action.AddedGoodCountMetric(6),
+        Action.SetE2ELatencyMetric(0),
         Action.Checkpointed(List(inputs(0).ack, inputs(1).ack, inputs(2).ack))
       )
     )
+
+    TestControl.executeEmbed(io)
+  }
 
   def e4 = {
     val messageTime = Instant.parse("2023-10-24T10:00:00.000Z")
@@ -108,6 +119,7 @@ class ProcessingSpec extends Specification with CatsEffect {
         Action.AddedBadCountMetric(0),
         Action.UploadedFile,
         Action.AddedGoodCountMetric(4),
+        Action.SetE2ELatencyMetric(processTime.toEpochMilli),
         Action.Checkpointed(List(inputs(0).ack, inputs(1).ack))
       )
     )

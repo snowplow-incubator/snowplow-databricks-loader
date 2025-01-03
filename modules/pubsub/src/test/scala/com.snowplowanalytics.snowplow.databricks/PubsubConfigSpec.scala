@@ -44,8 +44,8 @@ class PubsubConfigSpec extends Specification with CatsEffect {
 object PubsubConfigSpec {
   private val expectedMinimalConfig = Config[PubsubSourceConfig, PubsubSinkConfig](
     input = PubsubSourceConfig(
-      subscription               = PubsubSourceConfig.Subscription("my-project", "snowplow-enriched"),
-      parallelPullFactor         = BigDecimal(0.5),
+      subscription            = PubsubSourceConfig.Subscription("my-project", "snowplow-enriched"),
+      parallelPullFactor      = BigDecimal(0.5),
       durationPerAckExtension = 1.minute,
       minRemainingAckDeadline = BigDecimal(0.1),
       gcpUserAgent            = PubsubUserAgent("Snowplow OSS", "databricks-loader"),
