@@ -58,7 +58,7 @@ object Environment {
       _ <- Webhook.resource(config.main.monitoring.webhook, appInfo, httpClient, appHealth)
       badSink <-
         toSink(config.main.output.bad.sink).onError(_ => Resource.eval(appHealth.beUnhealthyForRuntimeService(RuntimeService.BadSink)))
-      metrics <- Resource.eval(Metrics.build(config.main.monitoring.metrics))
+      metrics <- Resource.eval(Metrics.build(config.main.monitoring.metrics, sourceAndAck))
       databricks <- Resource.eval(DatabricksUploader.build[F](config.main.output.good))
       databricksWrapped = DatabricksUploader.withHandledErrors(databricks, appHealth, config.main.retries)
     } yield Environment(

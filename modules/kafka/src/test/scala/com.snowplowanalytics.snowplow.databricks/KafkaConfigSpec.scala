@@ -20,7 +20,7 @@ import org.specs2.Specification
 import java.nio.file.Paths
 import scala.concurrent.duration.DurationInt
 
-import com.snowplowanalytics.snowplow.runtime.{AcceptedLicense, ConfigParser, Retrying, Telemetry, Webhook}
+import com.snowplowanalytics.snowplow.runtime.{AcceptedLicense, ConfigParser, HttpClient, Retrying, Telemetry, Webhook}
 import com.snowplowanalytics.snowplow.sinks.kafka.KafkaSinkConfig
 import com.snowplowanalytics.snowplow.sources.kafka.KafkaSourceConfig
 
@@ -103,10 +103,11 @@ object KafkaConfigSpec {
       metrics     = Config.Metrics(None),
       sentry      = None,
       healthProbe = Config.HealthProbe(port = Port.fromInt(8000).get, unhealthyLatency = 5.minutes),
-      webhook     = Webhook.Config(endpoint = None, tags = Map.empty, heartbeat = 60.minutes)
+      webhook     = Webhook.Config(endpoint = None, tags = Map.empty, heartbeat = 5.minutes)
     ),
     license                 = AcceptedLicense(),
     skipSchemas             = List.empty,
-    exitOnMissingIgluSchema = true
+    exitOnMissingIgluSchema = true,
+    http                    = Config.Http(HttpClient.Config(4))
   )
 }

@@ -14,16 +14,16 @@ package com.snowplowanalytics.snowplow.databricks
 import cats.effect.testing.specs2.CatsEffect
 import cats.effect.IO
 import com.comcast.ip4s.Port
-import eu.timepit.refined.types.all.PosInt
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.specs2.Specification
 
 import java.nio.file.Paths
 import scala.concurrent.duration.DurationInt
 
-import com.snowplowanalytics.snowplow.runtime.{AcceptedLicense, ConfigParser, Retrying, Telemetry, Webhook}
-import com.snowplowanalytics.snowplow.sinks.kinesis.{BackoffPolicy, KinesisSinkConfig}
+import com.snowplowanalytics.snowplow.runtime.{AcceptedLicense, ConfigParser, HttpClient, Retrying, Telemetry, Webhook}
+import com.snowplowanalytics.snowplow.sinks.kinesis.KinesisSinkConfig
 import com.snowplowanalytics.snowplow.sources.kinesis.KinesisSourceConfig
+import com.snowplowanalytics.snowplow.kinesis.BackoffPolicy
 
 class KinesisConfigSpec extends Specification with CatsEffect {
   import KinesisConfigSpec._
@@ -47,13 +47,14 @@ object KinesisConfigSpec {
       appName                  = "snowplow-databricks-loader",
       streamName               = "snowplow-enriched-events",
       workerIdentifier         = "test-hostname",
-      initialPosition          = KinesisSourceConfig.InitialPosition.Latest,
-      retrievalMode            = KinesisSourceConfig.Retrieval.Polling(1000),
-      bufferSize               = PosInt.unsafeFrom(1),
-      customEndpoint           = None,
-      dynamodbCustomEndpoint   = None,
-      cloudwatchCustomEndpoint = None,
-      leaseDuration            = 10.seconds
+      initialPosition                  = KinesisSourceConfig.InitialPosition.Latest,
+      retrievalMode                    = KinesisSourceConfig.Retrieval.Polling(1000),
+      customEndpoint                   = None,
+      dynamodbCustomEndpoint           = None,
+      cloudwatchCustomEndpoint         = None,
+      leaseDuration                    = 10.seconds,
+      maxLeasesToStealAtOneTimeFactor  = BigDecimal("2.0"),
+      checkpointThrottledBackoffPolicy = BackoffPolicy(minBackoff = 100.millis, maxBackoff = 1.second)
     ),
     output = Config.Output(
       good = Config.Databricks(
@@ -68,7 +69,7 @@ object KinesisConfigSpec {
       bad = Config.SinkWithMaxSize(
         sink = KinesisSinkConfig(
           streamName             = "bad",
-          throttledBackoffPolicy = BackoffPolicy(minBackoff = 100.millis, maxBackoff = 1.second, maxRetries = None),
+          throttledBackoffPolicy = BackoffPolicy(minBackoff = 100.millis, maxBackoff = 1.second),
           recordLimit            = 500,
           byteLimit              = 5242880,
           customEndpoint         = None
@@ -101,10 +102,11 @@ object KinesisConfigSpec {
       metrics     = Config.Metrics(None),
       sentry      = None,
       healthProbe = Config.HealthProbe(port = Port.fromInt(8000).get, unhealthyLatency = 5.minutes),
-      webhook     = Webhook.Config(endpoint = None, tags = Map.empty, heartbeat = 60.minutes)
+      webhook     = Webhook.Config(endpoint = None, tags = Map.empty, heartbeat = 5.minutes)
     ),
     license                 = AcceptedLicense(),
     skipSchemas             = List.empty,
-    exitOnMissingIgluSchema = true
+    exitOnMissingIgluSchema = true,
+    http                    = Config.Http(HttpClient.Config(4))
   )
 }

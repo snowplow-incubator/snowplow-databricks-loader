@@ -20,7 +20,7 @@ import org.specs2.Specification
 import java.nio.file.Paths
 import scala.concurrent.duration.DurationInt
 
-import com.snowplowanalytics.snowplow.runtime.{AcceptedLicense, ConfigParser, Retrying, Telemetry, Webhook}
+import com.snowplowanalytics.snowplow.runtime.{AcceptedLicense, ConfigParser, HttpClient, Retrying, Telemetry, Webhook}
 import com.snowplowanalytics.snowplow.pubsub.{GcpUserAgent => PubsubUserAgent}
 import com.snowplowanalytics.snowplow.sinks.pubsub.PubsubSinkConfig
 import com.snowplowanalytics.snowplow.sources.pubsub.PubsubSourceConfig
@@ -46,12 +46,11 @@ object PubsubConfigSpec {
     input = PubsubSourceConfig(
       subscription               = PubsubSourceConfig.Subscription("my-project", "snowplow-enriched"),
       parallelPullFactor         = BigDecimal(0.5),
-      bufferMaxBytes             = 10000000,
-      maxAckExtensionPeriod      = 1.hour,
-      minDurationPerAckExtension = 1.minute,
-      maxDurationPerAckExtension = 10.minutes,
-      gcpUserAgent               = PubsubUserAgent("Snowplow OSS", "databricks-loader"),
-      shutdownTimeout            = 30.seconds
+      durationPerAckExtension = 1.minute,
+      minRemainingAckDeadline = BigDecimal(0.1),
+      gcpUserAgent            = PubsubUserAgent("Snowplow OSS", "databricks-loader"),
+      maxMessagesPerPull      = 1000,
+      debounceRequests        = 100.millis
     ),
     output = Config.Output(
       good = Config.Databricks(
@@ -98,10 +97,11 @@ object PubsubConfigSpec {
       metrics     = Config.Metrics(None),
       sentry      = None,
       healthProbe = Config.HealthProbe(port = Port.fromInt(8000).get, unhealthyLatency = 5.minutes),
-      webhook     = Webhook.Config(endpoint = None, tags = Map.empty, heartbeat = 60.minutes)
+      webhook     = Webhook.Config(endpoint = None, tags = Map.empty, heartbeat = 5.minutes)
     ),
     license                 = AcceptedLicense(),
     skipSchemas             = List.empty,
-    exitOnMissingIgluSchema = true
+    exitOnMissingIgluSchema = true,
+    http                    = Config.Http(HttpClient.Config(4))
   )
 }
