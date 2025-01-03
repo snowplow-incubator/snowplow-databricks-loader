@@ -23,6 +23,7 @@ trait Metrics[F[_]] {
   def addGood(count: Long): F[Unit]
   def addBad(count: Long): F[Unit]
   def setLatencyMillis(latencyMillis: Long): F[Unit]
+  def setE2ELatencyMillis(latencyMillis: Long): F[Unit]
 
   def report: Stream[F, Nothing]
 }
@@ -35,20 +36,21 @@ object Metrics {
   private case class State(
     good: Long,
     bad: Long,
-    latencyMillis: Long
+    latencyMillis: Long,
+    e2eLatencyMillis: Option[Long]
   ) extends CommonMetrics.State {
     def toKVMetrics: List[CommonMetrics.KVMetric] =
       List(
         KVMetric.CountGood(good),
         KVMetric.CountBad(bad),
         KVMetric.LatencyMillis(latencyMillis)
-      )
+      ) ++ e2eLatencyMillis.map(KVMetric.E2ELatencyMillis(_))
   }
 
   private object State {
     def initialize[F[_]: Functor](sourceAndAck: SourceAndAck[F]): F[State] =
       sourceAndAck.currentStreamLatency.map { latency =>
-        State(0L, 0L, latency.fold(0L)(_.toMillis))
+        State(0L, 0L, latency.fold(0L)(_.toMillis), None)
       }
   }
 
@@ -64,6 +66,11 @@ object Metrics {
         ref.update(s => s.copy(bad = s.bad + count))
       def setLatencyMillis(latencyMillis: Long): F[Unit] =
         ref.update(s => s.copy(latencyMillis = s.latencyMillis.max(latencyMillis)))
+      def setE2ELatencyMillis(latency: Long): F[Unit] =
+        ref.update { state =>
+          val newLatency = state.e2eLatencyMillis.fold(latency)(_.max(latency))
+          state.copy(e2eLatencyMillis = Some(newLatency))
+        }
     }
 
   private object KVMetric {
@@ -82,6 +89,12 @@ object Metrics {
 
     final case class LatencyMillis(v: Long) extends CommonMetrics.KVMetric {
       val key        = "latency_millis"
+      val value      = v.toString
+      val metricType = CommonMetrics.MetricType.Gauge
+    }
+
+    final case class E2ELatencyMillis(v: Long) extends CommonMetrics.KVMetric {
+      val key        = "e2e_latency_millis"
       val value      = v.toString
       val metricType = CommonMetrics.MetricType.Gauge
     }

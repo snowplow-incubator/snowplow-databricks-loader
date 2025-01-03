@@ -23,6 +23,7 @@ import com.github.mjakubowski84.parquet4s.RowParquetRecord
 
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
+import java.time.Instant
 
 import com.snowplowanalytics.iglu.client.resolver.registries.{Http4sRegistryLookup, RegistryLookup}
 import com.snowplowanalytics.snowplow.analytics.scalasdk.Event
@@ -51,7 +52,8 @@ object Processing {
     events: List[Event],
     parseFailures: List[BadRow],
     countBytes: Long,
-    token: Unique.Token
+    token: Unique.Token,
+    earliestCollectorTstamp: Option[Instant]
   )
 
   private case class Batched(
@@ -59,20 +61,23 @@ object Processing {
     parseFailures: ListOfList[BadRow],
     entities: Map[TabledEntity, Set[SchemaSubVersion]],
     countBytes: Long,
-    tokens: Vector[Unique.Token]
+    tokens: Vector[Unique.Token],
+    earliestCollectorTstamp: Option[Instant]
   )
 
   private case class Transformed(
     events: List[RowParquetRecord],
     schema: MessageType,
     badAccumulated: ListOfList[BadRow],
-    tokens: Vector[Unique.Token]
+    tokens: Vector[Unique.Token],
+    earliestCollectorTstamp: Option[Instant]
   )
 
   private case class Serialized(
     bytes: ByteArrayInputStream,
     goodCount: Long,
-    tokens: Vector[Unique.Token]
+    tokens: Vector[Unique.Token],
+    earliestCollectorTstamp: Option[Instant]
   )
 
   private def eventProcessor[F[_]: Async: RegistryLookup](
@@ -88,7 +93,7 @@ object Processing {
       .through(setBadMetric(env))
       .through(writeToParquet(env))
       .through(sendToDatabricks(env))
-      .through(setGoodMetric(env))
+      .through(setPostLoadMetrics(env))
       .through(emitTokens)
   }
 
@@ -119,19 +124,20 @@ object Processing {
                                  }
                                }
                              }
-      } yield ParseResult(events, badRows, numBytes, token)
+        earliestCollectorTstamp = events.view.map(_.collector_tstamp).minOption
+      } yield ParseResult(events, badRows, numBytes, token, earliestCollectorTstamp)
     }
 
   /** Transform the Event into values compatible with parquet */
   private def transform[F[_]: Async: RegistryLookup](badProcessor: BadRowProcessor, env: Environment[F]): Pipe[F, Batched, Transformed] =
-    _.evalMap { case Batched(events, parseFailures, entities, numBytes, tokens) =>
+    _.evalMap { case Batched(events, parseFailures, entities, numBytes, tokens, earliestTstamp) =>
       for {
         _ <- Logger[F].debug(s"Processing batch of size ${events.size} and $numBytes bytes")
         nonAtomicFields <- NonAtomicFields.resolveTypes[F](env.resolver, entities, env.schemasToSkip)
         _ <- possiblyExitOnMissingIgluSchema(env, nonAtomicFields)
         ParquetUtils.TransformResult(moreBad, good) <- ParquetUtils.transform[F](badProcessor, events, nonAtomicFields)
         schema = ParquetSchema.forBatch(nonAtomicFields.fields.map(_.mergedField))
-      } yield Transformed(good, schema, parseFailures.prepend(moreBad), tokens)
+      } yield Transformed(good, schema, parseFailures.prepend(moreBad), tokens, earliestTstamp)
     }
 
   private def writeToParquet[F[_]: Sync](env: Environment[F]): Pipe[F, Transformed, Serialized] = { in =>
@@ -140,7 +146,7 @@ object Processing {
       batch <- in
       _ <- ParquetUtils.write[F](hadoopConf, env.compression, batch.schema, batch.events).unitary
       bytes <- Stream.eval(getBytes)
-    } yield Serialized(bytes, batch.events.length.toLong, batch.tokens)
+    } yield Serialized(bytes, batch.events.length.toLong, batch.tokens, batch.earliestCollectorTstamp)
   }
 
   private def sendToDatabricks[F[_]: Async](env: Environment[F]): Pipe[F, Serialized, Serialized] =
@@ -168,9 +174,18 @@ object Processing {
       env.metrics.addBad(batch.badAccumulated.size)
     }
 
-  private def setGoodMetric[F[_], A](env: Environment[F]): Pipe[F, Serialized, Serialized] =
+  private def setPostLoadMetrics[F[_]: Sync](env: Environment[F]): Pipe[F, Serialized, Serialized] =
     _.evalTap { batch =>
-      env.metrics.addGood(batch.goodCount)
+      for {
+        now <- Sync[F].realTime
+        _ <- env.metrics.addGood(batch.goodCount)
+        _ <- batch.earliestCollectorTstamp match {
+               case Some(earliestCollectorTstamp) =>
+                 env.metrics.setE2ELatencyMillis(now.toMillis - earliestCollectorTstamp.toEpochMilli)
+               case None =>
+                 Sync[F].unit
+             }
+      } yield ()
     }
 
   private def emitTokens[F[_]]: Pipe[F, Serialized, Unique.Token] =
@@ -181,15 +196,23 @@ object Processing {
   private implicit def batchable: BatchUp.Batchable[ParseResult, Batched] = new BatchUp.Batchable[ParseResult, Batched] {
     def combine(b: Batched, a: ParseResult): Batched =
       Batched(
-        events        = b.events.prepend(a.events),
-        parseFailures = b.parseFailures.prepend(a.parseFailures),
-        countBytes    = b.countBytes + a.countBytes,
-        entities      = Foldable[List].foldMap(a.events)(TabledEntity.forEvent(_)) |+| b.entities,
-        tokens        = b.tokens :+ a.token
+        events                  = b.events.prepend(a.events),
+        parseFailures           = b.parseFailures.prepend(a.parseFailures),
+        countBytes              = b.countBytes + a.countBytes,
+        entities                = Foldable[List].foldMap(a.events)(TabledEntity.forEvent(_)) |+| b.entities,
+        tokens                  = b.tokens :+ a.token,
+        earliestCollectorTstamp = chooseEarliestTstamp(a.earliestCollectorTstamp, b.earliestCollectorTstamp)
       )
     def single(a: ParseResult): Batched = {
       val entities = Foldable[List].foldMap(a.events)(TabledEntity.forEvent(_))
-      Batched(ListOfList.of(List(a.events)), ListOfList.of(List(a.parseFailures)), entities, a.countBytes, Vector(a.token))
+      Batched(
+        ListOfList.of(List(a.events)),
+        ListOfList.of(List(a.parseFailures)),
+        entities,
+        a.countBytes,
+        Vector(a.token),
+        a.earliestCollectorTstamp
+      )
     }
     def weightOf(a: ParseResult): Long =
       a.countBytes
@@ -208,4 +231,11 @@ object Processing {
       )
     } else Applicative[F].unit
 
+  private def chooseEarliestTstamp(o1: Option[Instant], o2: Option[Instant]): Option[Instant] =
+    (o1, o2)
+      .mapN { case (t1, t2) =>
+        if (t1.isBefore(t2)) t1 else t2
+      }
+      .orElse(o1)
+      .orElse(o2)
 }
