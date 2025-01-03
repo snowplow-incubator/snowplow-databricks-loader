@@ -1,7 +1,8 @@
 {
-  # -- Full license test available in LICENSE.md
-  "license" {
-    "accept": true
+  # -- Accept the terms of the Snowplow Limited Use License Agreement
+  # -- See https://docs.snowplow.io/limited-use-license-1.1/
+  "license": {
+    "accept": ${?ACCEPT_LIMITED_USE_LICENSE}
   }
 
   "input": {
