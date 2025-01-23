@@ -15,14 +15,8 @@ import cats.data.NonEmptyVector
 import cats.implicits._
 import cats.effect.Sync
 import io.circe.Json
-import fs2.Stream
 import com.github.mjakubowski84.parquet4s._
 import org.apache.parquet.io.api.Binary
-import org.apache.parquet.schema.MessageType
-import org.apache.parquet.hadoop.metadata.CompressionCodecName
-import com.github.mjakubowski84.parquet4s.{ParquetWriter, Path, RowParquetRecord}
-import com.github.mjakubowski84.parquet4s.parquet.writeSingleFile
-import org.apache.hadoop.conf.Configuration
 
 import java.time.{Instant, LocalDate}
 import java.nio.ByteBuffer
@@ -34,19 +28,7 @@ import com.snowplowanalytics.snowplow.loaders.transform.{NonAtomicFields, Transf
 import com.snowplowanalytics.snowplow.sinks.ListOfList
 import com.snowplowanalytics.snowplow.runtime.syntax.foldable._
 
-private[processing] object ParquetUtils {
-
-  def write[F[_]: Sync](
-    hadoopConf: Configuration,
-    compression: CompressionCodecName,
-    schema: MessageType,
-    events: List[RowParquetRecord]
-  ): Stream[F, Nothing] =
-    writeSingleFile[F]
-      .generic(schema)
-      .options(ParquetWriter.Options(hadoopConf = hadoopConf, compressionCodecName = compression))
-      .write(Path("/output.parquet")) // file name is not important
-      .apply(Stream.emits(events))
+private[processing] object TransformUtils {
 
   case class TransformResult(bad: List[BadRow], good: List[RowParquetRecord])
 

@@ -31,11 +31,27 @@ class ProcessingSpec extends Specification with CatsEffect {
 
   def is = s2"""
   The databricks loader should:
+    Initialize the volume with an empty parquet file when there are no events $e0
     Insert events to Databricks and ack the events $e1
     Emit BadRows when there are badly formatted events $e2
     Write good batches and bad events when input contains both $e3
     Set the latency metric based off the message timestamp $e4
   """
+
+  def e0 = {
+    val io = for {
+      control <- MockEnvironment.build(Nil)
+      _ <- Processing.stream(control.environment).compile.drain
+      state <- control.state.get
+    } yield state should beEqualTo(
+      Vector(
+        Action.SerializedToParquet(0),
+        Action.UploadedFile("mock serialized 0 events")
+      )
+    )
+
+    TestControl.executeEmbed(io)
+  }
 
   def e1 = {
     val io = for {
@@ -45,8 +61,11 @@ class ProcessingSpec extends Specification with CatsEffect {
       state <- control.state.get
     } yield state should beEqualTo(
       Vector(
+        Action.SerializedToParquet(0),
+        Action.UploadedFile("mock serialized 0 events"),
         Action.AddedBadCountMetric(0),
-        Action.UploadedFile,
+        Action.SerializedToParquet(4),
+        Action.UploadedFile("mock serialized 4 events"),
         Action.AddedGoodCountMetric(4),
         Action.SetE2ELatencyMetric(0),
         Action.Checkpointed(List(inputs(0).ack, inputs(1).ack))
@@ -64,8 +83,11 @@ class ProcessingSpec extends Specification with CatsEffect {
       state <- control.state.get
     } yield state should beEqualTo(
       Vector(
+        Action.SerializedToParquet(0),
+        Action.UploadedFile("mock serialized 0 events"),
         Action.SentToBad(6),
         Action.AddedBadCountMetric(6),
+        Action.SerializedToParquet(0),
         Action.AddedGoodCountMetric(0),
         Action.Checkpointed(List(inputs(0).ack, inputs(1).ack, inputs(2).ack))
       )
@@ -86,9 +108,12 @@ class ProcessingSpec extends Specification with CatsEffect {
       state <- control.state.get
     } yield state should beEqualTo(
       Vector(
+        Action.SerializedToParquet(0),
+        Action.UploadedFile("mock serialized 0 events"),
         Action.SentToBad(6),
         Action.AddedBadCountMetric(6),
-        Action.UploadedFile,
+        Action.SerializedToParquet(6),
+        Action.UploadedFile("mock serialized 6 events"),
         Action.AddedGoodCountMetric(6),
         Action.SetE2ELatencyMetric(0),
         Action.Checkpointed(List(inputs(0).ack, inputs(1).ack, inputs(2).ack))
@@ -114,10 +139,13 @@ class ProcessingSpec extends Specification with CatsEffect {
       state <- control.state.get
     } yield state should beEqualTo(
       Vector(
+        Action.SerializedToParquet(0),
+        Action.UploadedFile("mock serialized 0 events"),
         Action.SetLatencyMetric(42123),
         Action.SetLatencyMetric(42123),
         Action.AddedBadCountMetric(0),
-        Action.UploadedFile,
+        Action.SerializedToParquet(4),
+        Action.UploadedFile("mock serialized 4 events"),
         Action.AddedGoodCountMetric(4),
         Action.SetE2ELatencyMetric(processTime.toEpochMilli),
         Action.Checkpointed(List(inputs(0).ack, inputs(1).ack))
