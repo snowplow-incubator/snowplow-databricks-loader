@@ -11,7 +11,7 @@
 package com.snowplowanalytics.snowplow.databricks.processing
 
 import cats.implicits._
-import cats.{Applicative, Foldable}
+import cats.{Applicative, Foldable, Monad}
 import cats.effect.{Async, Sync}
 import cats.effect.kernel.Unique
 import fs2.{Chunk, Pipe, Stream}
@@ -43,7 +43,8 @@ object Processing {
   def stream[F[_]: Async](env: Environment[F]): Stream[F, Nothing] = {
     implicit val lookup: RegistryLookup[F] = Http4sRegistryLookup(env.httpClient)
     val eventProcessingConfig              = EventProcessingConfig(EventProcessingConfig.NoWindowing)
-    env.source.stream(eventProcessingConfig, eventProcessor(env))
+    Stream.eval(initializeWithEmptyParquet(env)).drain ++
+      env.source.stream(eventProcessingConfig, eventProcessor(env))
   }
 
   /** Model used between stages of the processing pipeline */
@@ -135,19 +136,17 @@ object Processing {
         _ <- Logger[F].debug(s"Processing batch of size ${events.size} and $numBytes bytes")
         nonAtomicFields <- NonAtomicFields.resolveTypes[F](env.resolver, entities, env.schemasToSkip)
         _ <- possiblyExitOnMissingIgluSchema(env, nonAtomicFields)
-        ParquetUtils.TransformResult(moreBad, good) <- ParquetUtils.transform[F](badProcessor, events, nonAtomicFields)
+        TransformUtils.TransformResult(moreBad, good) <- TransformUtils.transform[F](badProcessor, events, nonAtomicFields)
         schema = ParquetSchema.forBatch(nonAtomicFields.fields.map(_.mergedField))
       } yield Transformed(good, schema, parseFailures.prepend(moreBad), tokens, earliestTstamp)
     }
 
-  private def writeToParquet[F[_]: Sync](env: Environment[F]): Pipe[F, Transformed, Serialized] = { in =>
-    for {
-      InMemoryFileSystem.Configured(hadoopConf, getBytes) <- Stream.resource(InMemoryFileSystem.configure(env.batching))
-      batch <- in
-      _ <- ParquetUtils.write[F](hadoopConf, env.compression, batch.schema, batch.events).unitary
-      bytes <- Stream.eval(getBytes)
-    } yield Serialized(bytes, batch.events.length.toLong, batch.tokens, batch.earliestCollectorTstamp)
-  }
+  private def writeToParquet[F[_]: Sync](env: Environment[F]): Pipe[F, Transformed, Serialized] =
+    _.evalMap { batch =>
+      for {
+        bytes <- env.serializer.serialize(batch.schema, batch.events)
+      } yield Serialized(bytes, batch.events.length.toLong, batch.tokens, batch.earliestCollectorTstamp)
+    }
 
   private def sendToDatabricks[F[_]: Async](env: Environment[F]): Pipe[F, Serialized, Serialized] =
     _.parEvalMap(env.batching.uploadConcurrency) { batch =>
@@ -238,4 +237,12 @@ object Processing {
       }
       .orElse(o1)
       .orElse(o2)
+
+  private def initializeWithEmptyParquet[F[_]: Monad](env: Environment[F]): F[Unit] = {
+    val schema = ParquetSchema.forBatch(Vector.empty)
+    for {
+      serialized <- env.serializer.serialize(schema, Nil)
+      _ <- env.databricks.upload(serialized)
+    } yield ()
+  }
 }

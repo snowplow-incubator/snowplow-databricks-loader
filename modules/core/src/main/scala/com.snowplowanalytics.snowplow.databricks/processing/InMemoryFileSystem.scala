@@ -97,7 +97,7 @@ class InMemoryFileSystem extends FileSystem { fs =>
 
 }
 
-object InMemoryFileSystem {
+private[processing] object InMemoryFileSystem {
 
   case class Configured[F[_]](hadoopConf: Configuration, getBytes: F[ByteArrayInputStream])
 

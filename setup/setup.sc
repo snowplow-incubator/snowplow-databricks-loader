@@ -63,6 +63,8 @@ FROM cloud_files(
     "cloudfiles.includeExistingFiles", "false",
     "cloudfiles.schemaEvolutionMode", "addNewColumns",
     "cloudfiles.partitionColumns", "",
+    "cloudfiles.backfillInterval", "1 day",
+    "cloudfiles.useNotifications", "true",
     "datetimeRebaseMode", "CORRECTED",
     "int96RebaseMode", "CORRECTED",
     "mergeSchema", "true"

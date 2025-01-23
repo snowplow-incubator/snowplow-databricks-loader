@@ -12,7 +12,6 @@ package com.snowplowanalytics.snowplow.databricks
 
 import cats.implicits._
 import cats.effect.{Async, Resource, Sync}
-import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.http4s.client.Client
 import io.sentry.Sentry
 
@@ -20,7 +19,7 @@ import com.snowplowanalytics.iglu.client.resolver.Resolver
 import com.snowplowanalytics.iglu.core.SchemaCriterion
 import com.snowplowanalytics.snowplow.sources.SourceAndAck
 import com.snowplowanalytics.snowplow.sinks.Sink
-import com.snowplowanalytics.snowplow.databricks.processing.DatabricksUploader
+import com.snowplowanalytics.snowplow.databricks.processing.{DatabricksUploader, ParquetSerializer}
 import com.snowplowanalytics.snowplow.runtime.{AppHealth, AppInfo, HealthProbe, HttpClient, Webhook}
 
 case class Environment[F[_]](
@@ -30,10 +29,10 @@ case class Environment[F[_]](
   resolver: Resolver[F],
   httpClient: Client[F],
   databricks: DatabricksUploader.WithHandledErrors[F],
+  serializer: ParquetSerializer[F],
   metrics: Metrics[F],
   appHealth: AppHealth.Interface[F, Alert, RuntimeService],
   batching: Config.Batching,
-  compression: CompressionCodecName,
   badRowMaxSize: Int,
   schemasToSkip: List[SchemaCriterion],
   exitOnMissingIgluSchema: Boolean
@@ -61,6 +60,7 @@ object Environment {
       metrics <- Resource.eval(Metrics.build(config.main.monitoring.metrics, sourceAndAck))
       databricks <- Resource.eval(DatabricksUploader.build[F](config.main.output.good))
       databricksWrapped = DatabricksUploader.withHandledErrors(databricks, appHealth, config.main.retries)
+      serializer <- ParquetSerializer.resource(config.main.batching, config.main.output.good.compression)
     } yield Environment(
       appInfo                 = appInfo,
       source                  = sourceAndAck,
@@ -68,10 +68,10 @@ object Environment {
       resolver                = resolver,
       httpClient              = httpClient,
       databricks              = databricksWrapped,
+      serializer              = serializer,
       metrics                 = metrics,
       appHealth               = appHealth,
       batching                = config.main.batching,
-      compression             = config.main.output.good.compression,
       badRowMaxSize           = config.main.output.bad.maxRecordSize,
       schemasToSkip           = config.main.skipSchemas,
       exitOnMissingIgluSchema = config.main.exitOnMissingIgluSchema

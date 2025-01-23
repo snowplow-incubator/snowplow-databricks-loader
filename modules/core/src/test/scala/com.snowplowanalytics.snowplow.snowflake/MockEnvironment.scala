@@ -14,17 +14,20 @@ import cats.implicits._
 import cats.effect.IO
 import cats.effect.kernel.{Ref, Resource, Unique}
 import org.http4s.client.Client
-import org.apache.parquet.hadoop.metadata.CompressionCodecName
+import org.apache.parquet.schema.MessageType
+import com.github.mjakubowski84.parquet4s.RowParquetRecord
 import fs2.Stream
 
 import com.snowplowanalytics.iglu.client.Resolver
 import com.snowplowanalytics.snowplow.sources.{EventProcessingConfig, EventProcessor, SourceAndAck, TokenedEvents}
 import com.snowplowanalytics.snowplow.sinks.Sink
-import com.snowplowanalytics.snowplow.databricks.processing.DatabricksUploader
+import com.snowplowanalytics.snowplow.databricks.processing.{DatabricksUploader, ParquetSerializer}
 import com.snowplowanalytics.snowplow.runtime.{AppHealth, AppInfo}
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import scala.io.Source
 import java.io.ByteArrayInputStream
+import java.nio.charset.StandardCharsets
 
 case class MockEnvironment(state: Ref[IO, Vector[MockEnvironment.Action]], environment: Environment[IO])
 
@@ -34,7 +37,8 @@ object MockEnvironment {
   object Action {
     case class Checkpointed(tokens: List[Unique.Token]) extends Action
     case class SentToBad(count: Long) extends Action
-    case object UploadedFile extends Action
+    case class UploadedFile(content: String) extends Action
+    case class SerializedToParquet(numEvents: Int) extends Action
     case class AddedGoodCountMetric(count: Long) extends Action
     case class AddedBadCountMetric(count: Long) extends Action
     case class SetLatencyMetric(millis: Long) extends Action
@@ -65,12 +69,12 @@ object MockEnvironment {
         databricks = testDatabricksUploader(state),
         metrics    = testMetrics(state),
         appHealth  = testAppHealth(state),
+        serializer = testSerializer(state),
         batching = Config.Batching(
           maxBytes          = 16000000,
           maxDelay          = 10.seconds,
           uploadConcurrency = 1
         ),
-        compression             = CompressionCodecName.SNAPPY,
         badRowMaxSize           = 1000000,
         schemasToSkip           = List.empty,
         exitOnMissingIgluSchema = false
@@ -88,7 +92,7 @@ object MockEnvironment {
   private def testDatabricksUploader(state: Ref[IO, Vector[Action]]): DatabricksUploader.WithHandledErrors[IO] =
     new DatabricksUploader.WithHandledErrors[IO] {
       def upload(bytes: ByteArrayInputStream): IO[Unit] =
-        state.update(_ :+ UploadedFile)
+        state.update(_ :+ UploadedFile(Source.fromInputStream(bytes).mkString))
     }
 
   private def testSourceAndAck(inputs: List[TokenedEvents], state: Ref[IO, Vector[Action]]): SourceAndAck[IO] =
@@ -144,5 +148,15 @@ object MockEnvironment {
         ref.update(_ :+ BecameHealthy(service))
       def beUnhealthyForRuntimeService(service: RuntimeService): IO[Unit] =
         ref.update(_ :+ BecameUnhealthy(service))
+    }
+
+  private def testSerializer(ref: Ref[IO, Vector[Action]]): ParquetSerializer[IO] =
+    new ParquetSerializer[IO] {
+      def serialize(schema: MessageType, events: List[RowParquetRecord]): IO[ByteArrayInputStream] = {
+        val bytes = s"mock serialized ${events.size} events".getBytes(StandardCharsets.UTF_8)
+        ref
+          .update(_ :+ SerializedToParquet(events.length))
+          .as(new ByteArrayInputStream(bytes))
+      }
     }
 }
