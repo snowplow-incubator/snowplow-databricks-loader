@@ -47,7 +47,7 @@ w.files.upload(uploadRequest)
 /** Create the file that defines the pipeline */
 
 val sql = s"""
-CREATE STREAMING LIVE TABLE $table
+CREATE OR REFRESH STREAMING LIVE TABLE $table
 PARTITIONED BY (load_tstamp_date, event_name)
 TBLPROPERTIES ('delta.dataSkippingStatsColumns' = 'load_tstamp,collector_tstamp,derived_tstamp,dvce_created_tstamp,true_tstamp')
 AS
@@ -65,6 +65,7 @@ FROM cloud_files(
     "cloudfiles.partitionColumns", "",
     "cloudfiles.backfillInterval", "1 day",
     "cloudfiles.useNotifications", "true",
+    "cloudfiles.maxFileAge", "90 days",
     "datetimeRebaseMode", "CORRECTED",
     "int96RebaseMode", "CORRECTED",
     "mergeSchema", "true"

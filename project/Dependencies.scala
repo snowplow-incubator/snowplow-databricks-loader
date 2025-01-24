@@ -46,12 +46,13 @@ object Dependencies {
     .exclude("com.github.luben", "zstd-jni")
 
   // java
-  val databricks    = "com.databricks"         % "databricks-sdk-java" % V.databricks
-  val slf4j         = "org.slf4j"              % "slf4j-simple"        % V.slf4j
-  val azureIdentity = "com.azure"              % "azure-identity"      % V.azureSdk
-  val sentry        = "io.sentry"              % "sentry"              % V.sentry
-  val jaxb          = "javax.xml.bind"         % "jaxb-api"            % V.jaxb
-  val stsSdk2       = "software.amazon.awssdk" % "sts"                 % V.awsSdk2
+  val databricks     = "com.databricks"         % "databricks-sdk-java" % V.databricks
+  val slf4j          = "org.slf4j"              % "slf4j-simple"        % V.slf4j
+  val log4jOverSlf4j = "org.slf4j"              % "log4j-over-slf4j"    % V.slf4j
+  val azureIdentity  = "com.azure"              % "azure-identity"      % V.azureSdk
+  val sentry         = "io.sentry"              % "sentry"              % V.sentry
+  val jaxb           = "javax.xml.bind"         % "jaxb-api"            % V.jaxb
+  val stsSdk2        = "software.amazon.awssdk" % "sts"                 % V.awsSdk2
   val hadoopClient = ("org.apache.hadoop" % "hadoop-client" % V.hadoop)
     .exclude("com.jcraft", "jsch")
     .exclude("org.apache.zookeeper", "zookeeper")
@@ -83,13 +84,15 @@ object Dependencies {
     specs2            % Test,
     catsEffectSpecs2  % Test,
     catsEffectTestkit % Test,
-    slf4j             % Test
+    slf4j             % Test,
+    log4jOverSlf4j    % Test
   )
 
   val kafkaDependencies = Seq(
     kafka,
     azureIdentity,
     slf4j            % Runtime,
+    log4jOverSlf4j   % Runtime,
     jaxb             % Runtime,
     specs2           % Test,
     catsEffectSpecs2 % Test
@@ -99,6 +102,7 @@ object Dependencies {
     pubsub,
     jaxb             % Runtime,
     slf4j            % Runtime,
+    log4jOverSlf4j   % Runtime,
     specs2           % Test,
     catsEffectSpecs2 % Test
   )
@@ -107,6 +111,7 @@ object Dependencies {
     kinesis,
     jaxb             % Runtime,
     slf4j            % Runtime,
+    log4jOverSlf4j   % Runtime,
     stsSdk2          % Runtime,
     specs2           % Test,
     catsEffectSpecs2 % Test
