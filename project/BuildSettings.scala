@@ -29,7 +29,6 @@ object BuildSettings {
     scalaVersion := "2.13.16",
     scalafmtConfig := file(".scalafmt.conf"),
     scalafmtOnCompile := false,
-    scalacOptions += "-Ywarn-macros:after",
     addCompilerPlugin(Dependencies.betterMonadicFor),
     ThisBuild / dynverVTagPrefix := false, // Otherwise git tags required to have v-prefix
     ThisBuild / dynverSeparator := "-", // to be compatible with docker

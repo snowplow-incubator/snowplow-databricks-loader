@@ -35,7 +35,8 @@ case class Environment[F[_]](
   batching: Config.Batching,
   badRowMaxSize: Int,
   schemasToSkip: List[SchemaCriterion],
-  exitOnMissingIgluSchema: Boolean
+  exitOnMissingIgluSchema: Boolean,
+  devFeatures: Config.DevFeatures
 )
 
 object Environment {
@@ -74,7 +75,8 @@ object Environment {
       batching                = config.main.batching,
       badRowMaxSize           = config.main.output.bad.maxRecordSize,
       schemasToSkip           = config.main.skipSchemas,
-      exitOnMissingIgluSchema = config.main.exitOnMissingIgluSchema
+      exitOnMissingIgluSchema = config.main.exitOnMissingIgluSchema,
+      devFeatures             = config.main.dev
     )
 
   private def enableSentry[F[_]: Sync](appInfo: AppInfo, config: Option[Config.Sentry]): Resource[F, Unit] =

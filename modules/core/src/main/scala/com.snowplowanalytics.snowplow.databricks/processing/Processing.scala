@@ -136,7 +136,7 @@ object Processing {
         _ <- Logger[F].debug(s"Processing batch of size ${events.size} and $numBytes bytes")
         nonAtomicFields <- NonAtomicFields.resolveTypes[F](env.resolver, entities, env.schemasToSkip)
         _ <- possiblyExitOnMissingIgluSchema(env, nonAtomicFields)
-        TransformUtils.TransformResult(moreBad, good) <- TransformUtils.transform[F](badProcessor, events, nonAtomicFields)
+        TransformUtils.TransformResult(moreBad, good) <- TransformUtils.transform[F](badProcessor, events, nonAtomicFields, env.devFeatures)
         schema = ParquetSchema.forBatch(nonAtomicFields.fields.map(_.mergedField))
       } yield Transformed(good, schema, parseFailures.prepend(moreBad), tokens, earliestTstamp)
     }
