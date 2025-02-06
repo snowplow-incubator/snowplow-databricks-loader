@@ -37,7 +37,8 @@ case class Config[+Source, +Sink](
   license: AcceptedLicense,
   skipSchemas: List[SchemaCriterion],
   exitOnMissingIgluSchema: Boolean,
-  http: Config.Http
+  http: Config.Http,
+  dev: Config.DevFeatures
 )
 
 object Config {
@@ -95,6 +96,17 @@ object Config {
 
   case class Http(client: HttpClient.Config)
 
+  /**
+   * Features that are never intended for production pipelines. Only exist to help the maintainers
+   * of this loader.
+   *
+   * @param setEtlTstamp
+   *   Overrides the event's `etl_tstamp` field, replacing it with the time the parquet file is
+   *   pushed to the Databricks volume. Helpful to devs because we can measure the difference
+   *   between `etl_tstamp` (set by this loader) and `load_tstamp` (set by Databricks)
+   */
+  case class DevFeatures(setEtlTstamp: Boolean)
+
   implicit def decoder[Source: Decoder, Sink: Decoder]: Decoder[Config[Source, Sink]] = {
     implicit val configuration = Configuration.default.withDiscriminator("type")
     implicit val compressionDecoder = Decoder.decodeString.emapTry { str =>
@@ -121,6 +133,7 @@ object Config {
     implicit val monitoringDecoder  = deriveConfiguredDecoder[Monitoring]
     implicit val retriesDecoder     = deriveConfiguredDecoder[Retries]
     implicit val httpDecoder        = deriveConfiguredDecoder[Http]
+    implicit val devFeaturesDecoder = deriveConfiguredDecoder[DevFeatures]
 
     // TODO add databricks docs
     implicit val licenseDecoder =

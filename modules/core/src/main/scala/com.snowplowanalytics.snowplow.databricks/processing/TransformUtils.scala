@@ -24,6 +24,7 @@ import java.nio.ByteBuffer
 import com.snowplowanalytics.iglu.schemaddl.parquet.{Caster, Type}
 import com.snowplowanalytics.snowplow.analytics.scalasdk.Event
 import com.snowplowanalytics.snowplow.badrows.{BadRow, Processor => BadProcessor}
+import com.snowplowanalytics.snowplow.databricks.Config
 import com.snowplowanalytics.snowplow.loaders.transform.{NonAtomicFields, Transform}
 import com.snowplowanalytics.snowplow.sinks.ListOfList
 import com.snowplowanalytics.snowplow.runtime.syntax.foldable._
@@ -35,7 +36,8 @@ private[processing] object TransformUtils {
   def transform[F[_]: Sync](
     badProcessor: BadProcessor,
     events: ListOfList[Event],
-    entities: NonAtomicFields.Result
+    entities: NonAtomicFields.Result,
+    devFeatures: Config.DevFeatures
   ): F[TransformResult] =
     Foldable[ListOfList]
       .traverseSeparateUnordered(events) { event =>
@@ -48,6 +50,7 @@ private[processing] object TransformUtils {
       .map { case (bad, good) =>
         TransformResult(bad, good)
       }
+      .flatMap(overrideEtlTstamp(devFeatures, _))
 
   private val caster: Caster[Value] = new Caster[Value] {
     def nullValue: Value                = NullValue
@@ -93,5 +96,15 @@ private[processing] object TransformUtils {
       BinaryValue(Binary.fromReusedByteArray(buffer.array()))
     }
   }
+
+  private def overrideEtlTstamp[F[_]: Sync](devFeatures: Config.DevFeatures, res: TransformResult): F[TransformResult] =
+    if (devFeatures.setEtlTstamp) {
+      for {
+        now <- Sync[F].realTimeInstant
+        etlTstamp = caster.timestampValue(now)
+        good      = res.good.map(_.updated("etl_tstamp", etlTstamp))
+      } yield res.copy(good = good)
+    } else
+      res.pure[F]
 
 }
