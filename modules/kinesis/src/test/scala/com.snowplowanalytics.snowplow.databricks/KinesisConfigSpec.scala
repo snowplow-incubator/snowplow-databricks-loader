@@ -54,7 +54,8 @@ object KinesisConfigSpec {
       cloudwatchCustomEndpoint         = None,
       leaseDuration                    = 10.seconds,
       maxLeasesToStealAtOneTimeFactor  = BigDecimal("2.0"),
-      checkpointThrottledBackoffPolicy = BackoffPolicy(minBackoff = 100.millis, maxBackoff = 1.second)
+      checkpointThrottledBackoffPolicy = BackoffPolicy(minBackoff = 100.millis, maxBackoff = 1.second),
+      debounceCheckpoints              = 10.seconds
     ),
     output = Config.Output(
       good = Config.Databricks(
@@ -107,6 +108,7 @@ object KinesisConfigSpec {
     license                 = AcceptedLicense(),
     skipSchemas             = List.empty,
     exitOnMissingIgluSchema = true,
-    http                    = Config.Http(HttpClient.Config(4))
+    http                    = Config.Http(HttpClient.Config(4)),
+    dev                     = Config.DevFeatures(setEtlTstamp = false)
   )
 }

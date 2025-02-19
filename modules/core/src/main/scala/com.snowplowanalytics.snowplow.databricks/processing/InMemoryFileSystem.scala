@@ -22,6 +22,13 @@ import java.util.EnumSet
 
 import com.snowplowanalytics.snowplow.databricks.Config
 
+/**
+ * An implementation of a Hadoop FileSystem, which stores everything in memory
+ *
+ * Unlike a real file system, it is UNSAFE for multiple threads/fibers to call `create` at the same
+ * time. The calling thread/fiber is responsible for making sure `create` and `getBytes` are
+ * accessed sequentially.
+ */
 class InMemoryFileSystem extends FileSystem { fs =>
   @volatile private var inputStream: ByteArrayInputStream = _
 

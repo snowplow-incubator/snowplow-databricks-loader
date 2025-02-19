@@ -19,11 +19,13 @@ import fs2.Stream
 import com.snowplowanalytics.snowplow.sources.SourceAndAck
 import com.snowplowanalytics.snowplow.runtime.{Metrics => CommonMetrics}
 
+import scala.concurrent.duration.{Duration, FiniteDuration}
+
 trait Metrics[F[_]] {
   def addGood(count: Long): F[Unit]
   def addBad(count: Long): F[Unit]
-  def setLatencyMillis(latencyMillis: Long): F[Unit]
-  def setE2ELatencyMillis(latencyMillis: Long): F[Unit]
+  def setLatency(latency: FiniteDuration): F[Unit]
+  def setE2ELatency(latency: FiniteDuration): F[Unit]
 
   def report: Stream[F, Nothing]
 }
@@ -36,21 +38,21 @@ object Metrics {
   private case class State(
     good: Long,
     bad: Long,
-    latencyMillis: Long,
-    e2eLatencyMillis: Option[Long]
+    latency: FiniteDuration,
+    e2eLatency: Option[FiniteDuration]
   ) extends CommonMetrics.State {
     def toKVMetrics: List[CommonMetrics.KVMetric] =
       List(
         KVMetric.CountGood(good),
         KVMetric.CountBad(bad),
-        KVMetric.LatencyMillis(latencyMillis)
-      ) ++ e2eLatencyMillis.map(KVMetric.E2ELatencyMillis(_))
+        KVMetric.Latency(latency)
+      ) ++ e2eLatency.map(KVMetric.E2ELatency(_))
   }
 
   private object State {
     def initialize[F[_]: Functor](sourceAndAck: SourceAndAck[F]): F[State] =
       sourceAndAck.currentStreamLatency.map { latency =>
-        State(0L, 0L, latency.fold(0L)(_.toMillis), None)
+        State(0L, 0L, latency.getOrElse(Duration.Zero), None)
       }
   }
 
@@ -64,12 +66,12 @@ object Metrics {
         ref.update(s => s.copy(good = s.good + count))
       def addBad(count: Long): F[Unit] =
         ref.update(s => s.copy(bad = s.bad + count))
-      def setLatencyMillis(latencyMillis: Long): F[Unit] =
-        ref.update(s => s.copy(latencyMillis = s.latencyMillis.max(latencyMillis)))
-      def setE2ELatencyMillis(latency: Long): F[Unit] =
+      def setLatency(latency: FiniteDuration): F[Unit] =
+        ref.update(s => s.copy(latency = s.latency.max(latency)))
+      def setE2ELatency(latency: FiniteDuration): F[Unit] =
         ref.update { state =>
-          val newLatency = state.e2eLatencyMillis.fold(latency)(_.max(latency))
-          state.copy(e2eLatencyMillis = Some(newLatency))
+          val newLatency = state.e2eLatency.fold(latency)(_.max(latency))
+          state.copy(e2eLatency = Some(newLatency))
         }
     }
 
@@ -87,15 +89,15 @@ object Metrics {
       val metricType = CommonMetrics.MetricType.Count
     }
 
-    final case class LatencyMillis(v: Long) extends CommonMetrics.KVMetric {
+    final case class Latency(v: FiniteDuration) extends CommonMetrics.KVMetric {
       val key        = "latency_millis"
-      val value      = v.toString
+      val value      = v.toMillis.toString
       val metricType = CommonMetrics.MetricType.Gauge
     }
 
-    final case class E2ELatencyMillis(v: Long) extends CommonMetrics.KVMetric {
+    final case class E2ELatency(v: FiniteDuration) extends CommonMetrics.KVMetric {
       val key        = "e2e_latency_millis"
-      val value      = v.toString
+      val value      = v.toMillis.toString
       val metricType = CommonMetrics.MetricType.Gauge
     }
 

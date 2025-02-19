@@ -102,6 +102,7 @@ object PubsubConfigSpec {
     license                 = AcceptedLicense(),
     skipSchemas             = List.empty,
     exitOnMissingIgluSchema = true,
-    http                    = Config.Http(HttpClient.Config(4))
+    http                    = Config.Http(HttpClient.Config(4)),
+    dev                     = Config.DevFeatures(setEtlTstamp = false)
   )
 }
