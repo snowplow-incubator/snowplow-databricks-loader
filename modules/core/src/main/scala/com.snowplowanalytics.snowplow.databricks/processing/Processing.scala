@@ -24,6 +24,7 @@ import com.github.mjakubowski84.parquet4s.RowParquetRecord
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
 import java.time.Instant
+import scala.concurrent.duration.DurationLong
 
 import com.snowplowanalytics.iglu.client.resolver.registries.{Http4sRegistryLookup, RegistryLookup}
 import com.snowplowanalytics.snowplow.analytics.scalasdk.Event
@@ -34,7 +35,7 @@ import com.snowplowanalytics.snowplow.sinks.ListOfList
 import com.snowplowanalytics.snowplow.loaders.transform.{BadRowsSerializer, NonAtomicFields, SchemaSubVersion, TabledEntity}
 import com.snowplowanalytics.snowplow.runtime.processing.BatchUp
 import com.snowplowanalytics.snowplow.runtime.syntax.foldable._
-import com.snowplowanalytics.snowplow.databricks.{Environment, Metrics, RuntimeService}
+import com.snowplowanalytics.snowplow.databricks.{Environment, RuntimeService}
 
 object Processing {
 
@@ -42,7 +43,7 @@ object Processing {
 
   def stream[F[_]: Async](env: Environment[F]): Stream[F, Nothing] = {
     implicit val lookup: RegistryLookup[F] = Http4sRegistryLookup(env.httpClient)
-    val eventProcessingConfig              = EventProcessingConfig(EventProcessingConfig.NoWindowing)
+    val eventProcessingConfig              = EventProcessingConfig(EventProcessingConfig.NoWindowing, env.metrics.setLatency)
     Stream.eval(initializeWithEmptyParquet(env)).drain ++
       env.source.stream(eventProcessingConfig, eventProcessor(env))
   }
@@ -86,8 +87,7 @@ object Processing {
   ): EventProcessor[F] = { in =>
     val badProcessor = BadRowProcessor(env.appInfo.name, env.appInfo.version)
 
-    in.through(setLatency(env.metrics))
-      .through(parseBytes(badProcessor))
+    in.through(parseBytes(badProcessor))
       .through(BatchUp.withTimeout(env.batching.maxBytes.toLong, env.batching.maxDelay))
       .through(transform(badProcessor, env))
       .through(sendFailedEvents(env, badProcessor))
@@ -98,23 +98,9 @@ object Processing {
       .through(emitTokens)
   }
 
-  private def setLatency[F[_]: Sync](metrics: Metrics[F]): Pipe[F, TokenedEvents, TokenedEvents] =
-    _.evalTap {
-      _.earliestSourceTstamp match {
-        case Some(t) =>
-          for {
-            now <- Sync[F].realTime
-            latencyMillis = now.toMillis - t.toEpochMilli
-            _ <- metrics.setLatencyMillis(latencyMillis)
-          } yield ()
-        case None =>
-          Applicative[F].unit
-      }
-    }
-
   /** Parse raw bytes into Event using analytics sdk */
   private def parseBytes[F[_]: Sync](badProcessor: BadRowProcessor): Pipe[F, TokenedEvents, ParseResult] =
-    _.evalMap { case TokenedEvents(chunk, token, _) =>
+    _.evalMap { case TokenedEvents(chunk, token) =>
       for {
         numBytes <- Sync[F].delay(Foldable[Chunk].sumBytes(chunk))
         (badRows, events) <- Foldable[Chunk].traverseSeparateUnordered(chunk) { byteBuffer =>
@@ -180,7 +166,7 @@ object Processing {
         _ <- env.metrics.addGood(batch.goodCount)
         _ <- batch.earliestCollectorTstamp match {
                case Some(earliestCollectorTstamp) =>
-                 env.metrics.setE2ELatencyMillis(now.toMillis - earliestCollectorTstamp.toEpochMilli)
+                 env.metrics.setE2ELatency(now - earliestCollectorTstamp.toEpochMilli.millis)
                case None =>
                  Sync[F].unit
              }

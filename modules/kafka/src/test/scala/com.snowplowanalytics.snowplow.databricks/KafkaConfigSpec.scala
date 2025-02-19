@@ -52,7 +52,8 @@ object KafkaConfigSpec {
         "security.protocol" -> "SASL_SSL",
         "sasl.mechanism" -> "OAUTHBEARER",
         "sasl.jaas.config" -> "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;"
-      )
+      ),
+      debounceCommitOffsets = 10.seconds
     ),
     output = Config.Output(
       good = Config.Databricks(
@@ -108,6 +109,7 @@ object KafkaConfigSpec {
     license                 = AcceptedLicense(),
     skipSchemas             = List.empty,
     exitOnMissingIgluSchema = true,
-    http                    = Config.Http(HttpClient.Config(4))
+    http                    = Config.Http(HttpClient.Config(4)),
+    dev                     = Config.DevFeatures(setEtlTstamp = false)
   )
 }

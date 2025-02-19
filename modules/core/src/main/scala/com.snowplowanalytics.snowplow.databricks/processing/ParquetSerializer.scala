@@ -17,35 +17,39 @@ import com.github.mjakubowski84.parquet4s.{ParquetWriter, Path, RowParquetRecord
 import com.github.mjakubowski84.parquet4s.parquet.writeSingleFile
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 import org.apache.parquet.schema.MessageType
-import org.apache.hadoop.conf.Configuration
 
 import com.snowplowanalytics.snowplow.databricks.Config
 
 import java.io.ByteArrayInputStream
 
-trait ParquetSerializer[F[_]] {
-  def serialize(schema: MessageType, events: List[RowParquetRecord]): F[ByteArrayInputStream]
+class ParquetSerializer[F[_]: Sync] private (configuredFS: InMemoryFileSystem.Configured[F], compression: CompressionCodecName) {
+
+  /**
+   * Serializes the events to parquet format, creating an in-memory byte stream
+   *
+   * It is UNSAFE for multiple threads/fibers to call this method at the same time.
+   *
+   * The calling thread/fiber is responsible for making sure it is accessed sequentially.
+   */
+  def serialize(schema: MessageType, events: List[RowParquetRecord]): F[ByteArrayInputStream] =
+    writeToInMemoryFS(schema, events).compile.drain >> configuredFS.getBytes
+
+  private def writeToInMemoryFS(
+    schema: MessageType,
+    events: List[RowParquetRecord]
+  ): Stream[F, Nothing] =
+    writeSingleFile[F]
+      .generic(schema)
+      .options(ParquetWriter.Options(hadoopConf = configuredFS.hadoopConf, compressionCodecName = compression))
+      .write(Path("/output.parquet")) // file name is not important
+      .apply(Stream.emits(events))
 }
 
 object ParquetSerializer {
 
   def resource[F[_]: Sync](config: Config.Batching, compression: CompressionCodecName): Resource[F, ParquetSerializer[F]] =
     InMemoryFileSystem.configure(config).map { configuredFS =>
-      new ParquetSerializer[F] {
-        def serialize(schema: MessageType, events: List[RowParquetRecord]): F[ByteArrayInputStream] =
-          writeToInMemoryFS(configuredFS.hadoopConf, compression, schema, events).compile.drain >> configuredFS.getBytes
-      }
+      new ParquetSerializer[F](configuredFS, compression)
     }
 
-  private def writeToInMemoryFS[F[_]: Sync](
-    hadoopConf: Configuration,
-    compression: CompressionCodecName,
-    schema: MessageType,
-    events: List[RowParquetRecord]
-  ): Stream[F, Nothing] =
-    writeSingleFile[F]
-      .generic(schema)
-      .options(ParquetWriter.Options(hadoopConf = hadoopConf, compressionCodecName = compression))
-      .write(Path("/output.parquet")) // file name is not important
-      .apply(Stream.emits(events))
 }
