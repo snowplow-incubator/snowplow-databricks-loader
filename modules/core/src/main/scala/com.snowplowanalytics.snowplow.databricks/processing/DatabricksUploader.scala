@@ -15,7 +15,7 @@ import cats.effect.{Async, Sync}
 import com.databricks.sdk.WorkspaceClient
 import com.databricks.sdk.core.{DatabricksConfig, UserAgent}
 import com.databricks.sdk.core.error.platform.{NotFound, PermissionDenied, Unauthenticated}
-import com.databricks.sdk.service.files.FilesAPI
+import com.databricks.sdk.service.files.{FilesAPI, UploadRequest}
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 
@@ -28,12 +28,14 @@ import com.snowplowanalytics.snowplow.databricks.{Alert, Config, RuntimeService}
 import com.snowplowanalytics.snowplow.runtime.{AppHealth, Retrying}
 
 trait DatabricksUploader[F[_]] {
-  def upload(bytes: ByteArrayInputStream): F[Unit]
+  def upload(bytes: ByteArrayInputStream, filename: String): F[Unit]
 }
 
 object DatabricksUploader {
 
-  trait WithHandledErrors[F[_]] extends DatabricksUploader[F]
+  trait WithHandledErrors[F[_]] {
+    def upload(bytes: ByteArrayInputStream): F[Unit]
+  }
 
   private implicit def logger[F[_]: Sync]: Logger[F] = Slf4jLogger.getLogger[F]
 
@@ -41,38 +43,47 @@ object DatabricksUploader {
     for {
       _ <- Sync[F].delay(UserAgent.withProduct("snowplow-loader", "0.0.0"))
       ws <- Sync[F].delay(new WorkspaceClient(databricksConfig(config)))
-    } yield impl(config, ws.files)
+    } yield impl(ws.files)
 
   def withHandledErrors[F[_]: Async](
     underlying: DatabricksUploader[F],
     appHealth: AppHealth.Interface[F, Alert, RuntimeService],
+    config: Config.Databricks,
     retries: Config.Retries
   ): WithHandledErrors[F] = new WithHandledErrors[F] {
     def upload(bytes: ByteArrayInputStream): F[Unit] =
-      Retrying.withRetries(
-        appHealth,
-        retries.transientErrors,
-        retries.setupErrors,
-        RuntimeService.DatabricksUploader,
-        Alert.FailedToUploadFile,
-        isSetupError
-      ) {
-        underlying.upload(bytes)
-      } <* appHealth.beHealthyForSetup
+      generatePath(config).flatMap { path =>
+        Retrying.withRetries(
+          appHealth,
+          retries.transientErrors,
+          retries.setupErrors,
+          RuntimeService.DatabricksUploader,
+          Alert.FailedToUploadFile,
+          isSetupError
+        ) {
+          // Reset first, in case this is a retry
+          Sync[F].delay(bytes.reset()) >>
+            underlying.upload(bytes, path)
+        } <* appHealth.beHealthyForSetup
+      }
   }
 
-  private def impl[F[_]: Sync](config: Config.Databricks, api: FilesAPI): DatabricksUploader[F] = new DatabricksUploader[F] {
-    def upload(bytes: ByteArrayInputStream): F[Unit] =
+  private def impl[F[_]: Sync](api: FilesAPI): DatabricksUploader[F] = new DatabricksUploader[F] {
+    def upload(bytes: ByteArrayInputStream, path: String): F[Unit] =
       for {
-        uuid <- Sync[F].delay(UUID.randomUUID)
-        now <- Sync[F].realTimeInstant
-        partition = timePartition(now)
-        name      = filename(config, now, uuid)
-        path      = s"/Volumes/${config.catalog}/${config.schema}/${config.volume}/events/$partition/$name"
         _ <- Logger[F].info(show"Uploading file of size ${bytes.available} to $path")
-        _ <- Sync[F].blocking(api.upload(path, bytes))
+        req = new UploadRequest().setFilePath(path).setContents(bytes).setOverwrite(false)
+        _ <- Sync[F].blocking(api.upload(req))
       } yield ()
   }
+
+  private def generatePath[F[_]: Sync](config: Config.Databricks): F[String] =
+    for {
+      uuid <- Sync[F].delay(UUID.randomUUID)
+      now <- Sync[F].realTimeInstant
+      partition = timePartition(now)
+      name      = filename(config, now, uuid)
+    } yield s"/Volumes/${config.catalog}/${config.schema}/${config.volume}/events/$partition/$name"
 
   private def databricksConfig(config: Config.Databricks): DatabricksConfig = {
     val c = new DatabricksConfig()
@@ -95,7 +106,8 @@ object DatabricksUploader {
   ): String = {
     val ext    = config.compression.getExtension
     val prefix = secondFormatter.format(loadTstamp)
-    s"$prefix-$uuid$ext.parquet"
+    val _      = s"$prefix-$uuid$ext.parquet"
+    "xyz.parquet"
   }
 
   private def timePartition(loadTstamp: Instant): String = {
