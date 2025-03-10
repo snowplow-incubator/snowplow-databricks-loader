@@ -48,13 +48,12 @@ w.files.upload(uploadRequest)
 
 val sql = s"""
 CREATE OR REFRESH STREAMING LIVE TABLE $table
-PARTITIONED BY (load_tstamp_date, event_name)
-TBLPROPERTIES ('delta.dataSkippingStatsColumns' = 'load_tstamp,collector_tstamp,derived_tstamp,dvce_created_tstamp,true_tstamp')
+CLUSTER BY (load_tstamp, event_name)
+TBLPROPERTIES ('delta.dataSkippingStatsColumns' = 'load_tstamp,collector_tstamp,derived_tstamp,dvce_created_tstamp,true_tstamp,event_name')
 AS
 SELECT
   *,
-  current_timestamp() as load_tstamp,
-  date(load_tstamp) as load_tstamp_date
+  current_timestamp() as load_tstamp
 FROM cloud_files(
   "/Volumes/$catalog/$schema/$volume/$table",
   "parquet",
