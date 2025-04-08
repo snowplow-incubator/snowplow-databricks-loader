@@ -59,12 +59,10 @@ FROM cloud_files(
   "parquet",
   map(
     "cloudfiles.inferColumnTypes", "false",
-    "cloudfiles.includeExistingFiles", "false",
+    "cloudfiles.includeExistingFiles", "true",
     "cloudfiles.schemaEvolutionMode", "addNewColumns",
     "cloudfiles.partitionColumns", "",
-    "cloudfiles.backfillInterval", "1 day",
-    "cloudfiles.useNotifications", "true",
-    "cloudfiles.maxFileAge", "90 days",
+    "cloudfiles.useManagedFileEvents", "true",
     "datetimeRebaseMode", "CORRECTED",
     "int96RebaseMode", "CORRECTED",
     "mergeSchema", "true"
