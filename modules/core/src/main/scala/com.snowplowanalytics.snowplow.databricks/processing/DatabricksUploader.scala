@@ -71,7 +71,7 @@ object DatabricksUploader {
   private def impl[F[_]: Sync](api: FilesAPI): DatabricksUploader[F] = new DatabricksUploader[F] {
     def upload(bytes: ByteArrayInputStream, path: String): F[Unit] =
       for {
-        _ <- Logger[F].info(show"Uploading file of size ${bytes.available} to $path")
+        _ <- Logger[F].debug(show"Uploading file of size ${bytes.available} to $path")
         req = new UploadRequest().setFilePath(path).setContents(bytes).setOverwrite(false)
         _ <- Sync[F].blocking(api.upload(req))
       } yield ()

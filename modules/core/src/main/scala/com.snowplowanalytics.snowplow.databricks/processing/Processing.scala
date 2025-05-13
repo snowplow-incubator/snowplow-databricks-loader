@@ -120,7 +120,8 @@ object Processing {
     _.evalMap { case Batched(events, parseFailures, entities, numBytes, tokens, earliestTstamp) =>
       for {
         _ <- Logger[F].debug(s"Processing batch of size ${events.size} and $numBytes bytes")
-        nonAtomicFields <- NonAtomicFields.resolveTypes[F](env.resolver, entities, env.schemasToSkip)
+        resolveTypesResult <- NonAtomicFields.resolveTypes[F](env.resolver, entities, env.schemasToSkip)
+        nonAtomicFields <- possiblyExitOnClashingIgluSchemas(env, resolveTypesResult)
         _ <- possiblyExitOnMissingIgluSchema(env, nonAtomicFields)
         TransformUtils.TransformResult(moreBad, good) <- TransformUtils.transform[F](badProcessor, events, nonAtomicFields, env.devFeatures)
         schema = ParquetSchema.forBatch(nonAtomicFields.fields.map(_.mergedField))
@@ -231,4 +232,14 @@ object Processing {
       _ <- env.databricks.upload(serialized)
     } yield ()
   }
+
+  private def possiblyExitOnClashingIgluSchemas[F[_]: Sync](
+    env: Environment[F],
+    resolveTypesResult: Either[NonAtomicFields.ResolveTypesException, NonAtomicFields.Result]
+  ): F[NonAtomicFields.Result] =
+    resolveTypesResult match {
+      case Left(e) =>
+        Logger[F].error(e.getMessage) *> env.appHealth.beUnhealthyForRuntimeService(RuntimeService.Iglu) *> Sync[F].raiseError(e)
+      case Right(r) => Applicative[F].pure(r)
+    }
 }
