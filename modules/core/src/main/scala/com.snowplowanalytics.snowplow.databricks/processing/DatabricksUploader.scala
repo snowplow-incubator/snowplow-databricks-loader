@@ -106,8 +106,7 @@ object DatabricksUploader {
   ): String = {
     val ext    = config.compression.getExtension
     val prefix = secondFormatter.format(loadTstamp)
-    val _      = s"$prefix-$uuid$ext.parquet"
-    "xyz.parquet"
+    s"$prefix-$uuid$ext.parquet"
   }
 
   private def timePartition(loadTstamp: Instant): String = {

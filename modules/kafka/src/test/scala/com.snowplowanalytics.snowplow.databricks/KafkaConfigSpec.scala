@@ -51,7 +51,8 @@ object KafkaConfigSpec {
         "auto.offset.reset" -> "latest",
         "security.protocol" -> "SASL_SSL",
         "sasl.mechanism" -> "OAUTHBEARER",
-        "sasl.jaas.config" -> "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;"
+        "sasl.jaas.config" -> "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;",
+        "group.instance.id" -> "test-hostname"
       ),
       debounceCommitOffsets = 10.seconds
     ),
