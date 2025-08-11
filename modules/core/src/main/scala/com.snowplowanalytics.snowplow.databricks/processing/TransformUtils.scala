@@ -26,7 +26,7 @@ import com.snowplowanalytics.snowplow.analytics.scalasdk.Event
 import com.snowplowanalytics.snowplow.badrows.{BadRow, Processor => BadProcessor}
 import com.snowplowanalytics.snowplow.databricks.Config
 import com.snowplowanalytics.snowplow.loaders.transform.{NonAtomicFields, Transform}
-import com.snowplowanalytics.snowplow.sinks.ListOfList
+import com.snowplowanalytics.snowplow.streams.ListOfList
 import com.snowplowanalytics.snowplow.runtime.syntax.foldable._
 
 private[processing] object TransformUtils {

@@ -20,8 +20,15 @@ import fs2.Stream
 import fs2.io.file.Files
 
 import com.snowplowanalytics.iglu.client.Resolver
-import com.snowplowanalytics.snowplow.sources.{EventProcessingConfig, EventProcessor, SourceAndAck, TokenedEvents}
-import com.snowplowanalytics.snowplow.sinks.Sink
+import com.snowplowanalytics.snowplow.streams.{
+  EventProcessingConfig,
+  EventProcessor,
+  ListOfList,
+  Sink,
+  Sinkable,
+  SourceAndAck,
+  TokenedEvents
+}
 import com.snowplowanalytics.snowplow.databricks.processing.{DatabricksUploader, ParquetSerializer}
 import com.snowplowanalytics.snowplow.runtime.{AppHealth, AppInfo}
 
@@ -147,8 +154,11 @@ object MockEnvironment {
         IO.pure(None)
     }
 
-  private def testSink(ref: Ref[IO, Results]): Sink[IO] = Sink[IO] { batch =>
-    ref.update(_.withAction(SentToBad(batch.size)))
+  private def testSink(ref: Ref[IO, Results]): Sink[IO] = new Sink[IO] {
+    override def sink(batch: ListOfList[Sinkable]): IO[Unit] =
+      ref.update(_.withAction(SentToBad(batch.size)))
+
+    override def isHealthy: IO[Boolean] = IO.pure(true)
   }
 
   private def testHttpClient: Client[IO] = Client[IO] { _ =>

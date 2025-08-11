@@ -11,5 +11,5 @@
 package com.snowplowanalytics.snowplow
 
 package object databricks {
-  type AnyConfig = Config[Any, Any]
+  type AnyConfig = Config[Any, Any, Any]
 }

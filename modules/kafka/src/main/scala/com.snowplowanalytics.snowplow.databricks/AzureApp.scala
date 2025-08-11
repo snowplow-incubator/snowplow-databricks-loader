@@ -10,18 +10,11 @@
  */
 package com.snowplowanalytics.snowplow.databricks
 
-import com.snowplowanalytics.snowplow.azure.AzureAuthenticationCallbackHandler
-import com.snowplowanalytics.snowplow.sources.kafka.{KafkaSource, KafkaSourceConfig}
-import com.snowplowanalytics.snowplow.sinks.kafka.{KafkaSink, KafkaSinkConfig}
+import cats.effect.IO
 
-import scala.reflect.classTag
+import com.snowplowanalytics.snowplow.streams.kafka.{KafkaFactory, KafkaSinkConfig, KafkaSourceConfig}
 
-class SourceAuthHandler extends AzureAuthenticationCallbackHandler
-class SinkAuthHandler extends AzureAuthenticationCallbackHandler
+object AzureApp extends LoaderApp[Unit, KafkaSourceConfig, KafkaSinkConfig](BuildInfo) {
 
-object AzureApp extends LoaderApp[KafkaSourceConfig, KafkaSinkConfig](BuildInfo) {
-
-  override def source: SourceProvider = KafkaSource.build(_, classTag[SourceAuthHandler])
-
-  override def badSink: SinkProvider = KafkaSink.resource(_, classTag[SinkAuthHandler])
+  override def toFactory: FactoryProvider = _ => KafkaFactory.resource[IO]
 }
