@@ -17,8 +17,7 @@ import io.sentry.Sentry
 
 import com.snowplowanalytics.iglu.client.resolver.Resolver
 import com.snowplowanalytics.iglu.core.SchemaCriterion
-import com.snowplowanalytics.snowplow.sources.SourceAndAck
-import com.snowplowanalytics.snowplow.sinks.Sink
+import com.snowplowanalytics.snowplow.streams.{Factory, Sink, SourceAndAck}
 import com.snowplowanalytics.snowplow.databricks.processing.{DatabricksUploader, ParquetSerializer}
 import com.snowplowanalytics.snowplow.runtime.{AppHealth, AppInfo, HealthProbe, HttpClient, Webhook}
 
@@ -41,23 +40,24 @@ case class Environment[F[_]](
 
 object Environment {
 
-  def fromConfig[F[_]: Async, SourceConfig, SinkConfig](
-    config: Config.WithIglu[SourceConfig, SinkConfig],
+  def fromConfig[F[_]: Async, FactoryConfig, SourceConfig, SinkConfig](
+    config: Config.WithIglu[FactoryConfig, SourceConfig, SinkConfig],
     appInfo: AppInfo,
-    toSource: SourceConfig => F[SourceAndAck[F]],
-    toSink: SinkConfig => Resource[F, Sink[F]]
+    toFactory: FactoryConfig => Resource[F, Factory[F, SourceConfig, SinkConfig]]
   ): Resource[F, Environment[F]] =
     for {
       _ <- enableSentry[F](appInfo, config.main.monitoring.sentry)
-      sourceAndAck <- Resource.eval(toSource(config.main.input))
+      factory <- toFactory(config.main.streams)
+      sourceAndAck <- factory.source(config.main.input)
       sourceReporter = sourceAndAck.isHealthy(config.main.monitoring.healthProbe.unhealthyLatency).map(_.showIfUnhealthy)
       appHealth <- Resource.eval(AppHealth.init[F, Alert, RuntimeService](List(sourceReporter)))
       resolver <- mkResolver[F](config.iglu)
       httpClient <- HttpClient.resource[F](config.main.http.client)
       _ <- HealthProbe.resource(config.main.monitoring.healthProbe.port, appHealth)
       _ <- Webhook.resource(config.main.monitoring.webhook, appInfo, httpClient, appHealth)
-      badSink <-
-        toSink(config.main.output.bad.sink).onError(_ => Resource.eval(appHealth.beUnhealthyForRuntimeService(RuntimeService.BadSink)))
+      badSink <- factory
+                   .sink(config.main.output.bad.sink)
+                   .onError(_ => Resource.eval(appHealth.beUnhealthyForRuntimeService(RuntimeService.BadSink)))
       metrics <- Resource.eval(Metrics.build(config.main.monitoring.metrics, sourceAndAck))
       databricks <- Resource.eval(DatabricksUploader.build[F](config.main.output.good))
       databricksWrapped = DatabricksUploader.withHandledErrors(databricks, appHealth, config.main.output.good, config.main.retries)

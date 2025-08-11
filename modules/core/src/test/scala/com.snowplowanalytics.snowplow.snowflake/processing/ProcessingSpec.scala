@@ -26,7 +26,7 @@ import com.snowplowanalytics.snowplow.analytics.scalasdk.Event
 import com.snowplowanalytics.snowplow.analytics.scalasdk.SnowplowEvent.{Contexts, UnstructEvent}
 import com.snowplowanalytics.snowplow.databricks.MockEnvironment
 import com.snowplowanalytics.snowplow.databricks.MockEnvironment.Action
-import com.snowplowanalytics.snowplow.sources.TokenedEvents
+import com.snowplowanalytics.snowplow.streams.TokenedEvents
 
 class ProcessingSpec extends Specification with CatsEffect {
   import ProcessingSpec._

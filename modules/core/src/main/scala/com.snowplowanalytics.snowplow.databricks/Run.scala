@@ -18,8 +18,7 @@ import org.typelevel.log4cats.slf4j.Slf4jLogger
 import io.circe.Decoder
 import com.monovore.decline.Opts
 
-import com.snowplowanalytics.snowplow.sources.SourceAndAck
-import com.snowplowanalytics.snowplow.sinks.Sink
+import com.snowplowanalytics.snowplow.streams.Factory
 import com.snowplowanalytics.snowplow.databricks.processing.Processing
 import com.snowplowanalytics.snowplow.runtime.{AppInfo, ConfigParser, LogUtils, Telemetry}
 
@@ -29,29 +28,27 @@ object Run {
 
   private implicit def logger[F[_]: Sync]: Logger[F] = Slf4jLogger.getLogger[F]
 
-  def fromCli[F[_]: Async, SourceConfig: Decoder, SinkConfig: Decoder](
+  def fromCli[F[_]: Async, FactoryConfig: Decoder, SourceConfig: Decoder, SinkConfig: Decoder](
     appInfo: AppInfo,
-    toSource: SourceConfig => F[SourceAndAck[F]],
-    toBadSink: SinkConfig => Resource[F, Sink[F]]
+    toFactory: FactoryConfig => Resource[F, Factory[F, SourceConfig, SinkConfig]]
   ): Opts[F[ExitCode]] = {
     val configPathOpt = Opts.option[Path]("config", help = "path to config file")
     val igluPathOpt   = Opts.option[Path]("iglu-config", help = "path to iglu resolver config file")
-    (configPathOpt, igluPathOpt).mapN(fromConfigPaths(appInfo, toSource, toBadSink, _, _))
+    (configPathOpt, igluPathOpt).mapN(fromConfigPaths(appInfo, toFactory, _, _))
   }
 
-  private def fromConfigPaths[F[_]: Async, SourceConfig: Decoder, SinkConfig: Decoder](
+  private def fromConfigPaths[F[_]: Async, FactoryConfig: Decoder, SourceConfig: Decoder, SinkConfig: Decoder](
     appInfo: AppInfo,
-    toSource: SourceConfig => F[SourceAndAck[F]],
-    toBadSink: SinkConfig => Resource[F, Sink[F]],
+    toFactory: FactoryConfig => Resource[F, Factory[F, SourceConfig, SinkConfig]],
     pathToConfig: Path,
     pathToResolver: Path
   ): F[ExitCode] = {
 
     val eitherT = for {
-      config <- ConfigParser.configFromFile[F, Config[SourceConfig, SinkConfig]](pathToConfig)
+      config <- ConfigParser.configFromFile[F, Config[FactoryConfig, SourceConfig, SinkConfig]](pathToConfig)
       resolver <- ConfigParser.igluResolverFromFile(pathToResolver)
       configWithIglu = Config.WithIglu(config, resolver)
-      _ <- EitherT.right[String](fromConfig(appInfo, toSource, toBadSink, configWithIglu))
+      _ <- EitherT.right[String](fromConfig(appInfo, toFactory, configWithIglu))
     } yield ExitCode.Success
 
     eitherT
@@ -65,13 +62,12 @@ object Run {
       }
   }
 
-  private def fromConfig[F[_]: Async, SourceConfig, SinkConfig](
+  private def fromConfig[F[_]: Async, FactoryConfig, SourceConfig, SinkConfig](
     appInfo: AppInfo,
-    toSource: SourceConfig => F[SourceAndAck[F]],
-    toBadSink: SinkConfig => Resource[F, Sink[F]],
-    config: Config.WithIglu[SourceConfig, SinkConfig]
+    toFactory: FactoryConfig => Resource[F, Factory[F, SourceConfig, SinkConfig]],
+    config: Config.WithIglu[FactoryConfig, SourceConfig, SinkConfig]
   ): F[ExitCode] =
-    Environment.fromConfig(config, appInfo, toSource, toBadSink).use { env =>
+    Environment.fromConfig(config, appInfo, toFactory).use { env =>
       Processing
         .stream(env)
         .concurrently(Telemetry.stream(config.main.telemetry, env.appInfo, env.httpClient))
