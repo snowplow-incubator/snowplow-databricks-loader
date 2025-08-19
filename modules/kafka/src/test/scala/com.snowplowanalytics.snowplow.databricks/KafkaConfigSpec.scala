@@ -34,7 +34,7 @@ class KafkaConfigSpec extends Specification with CatsEffect {
   """
 
   private def minimal = {
-    val path = Paths.get(getClass.getResource("/config.azure.minimal.hocon").toURI)
+    val path = Paths.get(getClass.getResource("/config.kafka.minimal.hocon").toURI)
     ConfigParser.configFromFile[IO, Config[Unit, KafkaSourceConfig, KafkaSinkConfig]](path).value.map { result =>
       result must beRight(expectedMinimalConfig)
     }
