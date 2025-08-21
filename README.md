@@ -4,46 +4,58 @@
 [![Release][release-image]][releases]
 [![License][license-image]][license]
 
-## Introduction
-
 This project contains applications required to load Snowplow data into Databricks with low latency.
 
 Check out [the example config files](./config) for how to configure your loader.
 
-#### Azure
+### Step 1: Run the loader
 
-The Azure Databricks loader reads the stream of enriched events from Event Hubs.
+The Databricks loader reads the stream of enriched events and pushes staging files to a Databricks volume
 
 Basic usage:
 `
 ```bash
 docker run \
   -v /path/to/config.hocon:/var/config.hocon \
-  snowplow/databricks-loader-kafka:0.1.0 \
-  --config /var/config.hocon
+  snowplow/databricks-loader-<flavour>:0.1.0 \
+  --config=/var/config.hocon \
+  --iglu-config=/var/iglu.hocon
 ```
 
-#### GCP
+...where `<flavour>` is either `kinesis` (for AWS), `pubsub` (for GCP) or `kafka` (for Azure).
 
-The GCP Databricks loader reads the stream of enriched events from Pubsub.
+### Step 2: Run a Databricks Lakeflow Declarative Pipeline
 
-```bash
-docker run \
-  -v /path/to/config.hocon:/var/config.hocon \
-  snowplow/databricks-loader-pubsub:0.1.0 \
-  --config /var/config.hocon
+Create a Pipeline in your Databricks workspace and and copy the following SQL into the associated .sql file:
+
+```sql
+CREATE STREAMING LIVE TABLE events
+CLUSTER BY (load_tstamp, event_name)
+TBLPROPERTIES (
+  'delta.dataSkippingStatsColumns' =
+      'load_tstamp,collector_tstamp,derived_tstamp,dvce_created_tstamp,true_tstamp,event_name'
+)
+AS SELECT
+  *,
+  current_timestamp() as load_tstamp
+FROM cloud_files(
+  "/Volumes/<CATALOG_NAME>/<VOLUME_NAME>/<SCHEMA_NAME>/events",
+  "parquet",
+  map(
+    "cloudfiles.inferColumnTypes", "false",
+    "cloudfiles.includeExistingFiles", "false", -- set to true to load files already present in the volume
+    "cloudfiles.schemaEvolutionMode", "addNewColumns",
+    "cloudfiles.partitionColumns", "",
+    "cloudfiles.useManagedFileEvents", "true",
+    "datetimeRebaseMode", "CORRECTED",
+    "int96RebaseMode", "CORRECTED",
+    "mergeSchema", "true"
+  )
+)
 ```
 
-#### AWS
+Replace `/Volumes/<CATALOG_NAME>/<VOLUME_NAME>/<SCHEMA_NAME>/events` with the correct path to your volume.
 
-The AWS Databricks loader reads the stream of enriched events from Kinesis.
-
-```bash
-docker run \
-  -v /path/to/config.hocon:/var/config.hocon \
-  snowplow/databricks-loader-kinesis:0.1.0 \
-  --config /var/config.hocon
-```
 
 ## Find out more
 
@@ -64,8 +76,7 @@ Licensed under the [Snowplow Limited Use License Agreement][license]. _(If you a
 [setup-image]: https://d3i6fms1cm1j0i.cloudfront.net/github/images/setup.png
 [roadmap-image]: https://d3i6fms1cm1j0i.cloudfront.net/github/images/roadmap.png
 [setup]: https://docs.snowplow.io/docs/getting-started-on-snowplow-open-source/
-<!-- TODO: update link when docs site has a databricks loader page: -->
-[techdocs]: https://docs.snowplow.io/docs/pipeline-components-and-applications/loaders-storage-targets/
+[techdocs]: https://docs.snowplow.io/docs/pipeline-components-and-applications/loaders-storage-targets/databricks-streaming-loader/
 [roadmap]: https://github.com/snowplow/snowplow/projects/7
 
 [build-image]: https://github.com/snowplow-incubator/databricks-loader/workflows/CI/badge.svg
