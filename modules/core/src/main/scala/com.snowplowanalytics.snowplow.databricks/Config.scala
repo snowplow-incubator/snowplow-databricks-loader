@@ -136,9 +136,8 @@ object Config {
     implicit val httpDecoder        = deriveConfiguredDecoder[Http]
     implicit val devFeaturesDecoder = deriveConfiguredDecoder[DevFeatures]
 
-    // TODO add databricks docs
     implicit val licenseDecoder =
-      AcceptedLicense.decoder(AcceptedLicense.DocumentationLink("https://docs.snowplow.io/limited-use-license-1.1/"))
+      AcceptedLicense.decoder(AcceptedLicense.DocumentationLink("https://docs.snowplow.io/docs/api-reference/loaders-storage-targets/databricks-streaming-loader/configuration-reference/#license"))
 
     deriveConfiguredDecoder[Config[Factory, Source, Sink]]
   }
