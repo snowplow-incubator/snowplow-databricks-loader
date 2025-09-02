@@ -137,7 +137,11 @@ object Config {
     implicit val devFeaturesDecoder = deriveConfiguredDecoder[DevFeatures]
 
     implicit val licenseDecoder =
-      AcceptedLicense.decoder(AcceptedLicense.DocumentationLink("https://docs.snowplow.io/docs/api-reference/loaders-storage-targets/databricks-streaming-loader/configuration-reference/#license"))
+      AcceptedLicense.decoder(
+        AcceptedLicense.DocumentationLink(
+          "https://docs.snowplow.io/docs/api-reference/loaders-storage-targets/databricks-streaming-loader/configuration-reference/#license"
+        )
+      )
 
     deriveConfiguredDecoder[Config[Factory, Source, Sink]]
   }

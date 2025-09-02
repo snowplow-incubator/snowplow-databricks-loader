@@ -78,6 +78,7 @@ object BuildSettings {
   lazy val addEnvVarsForTests = Test / envVars := Map(
     "DATABRICKS_CLIENT_ID" -> "test-client-id",
     "DATABRICKS_CLIENT_SECRET" -> "test-secret",
+    "DATABRICKS_TOKEN" -> "test-token",
     "HOSTNAME" -> "test-hostname"
   )
 
