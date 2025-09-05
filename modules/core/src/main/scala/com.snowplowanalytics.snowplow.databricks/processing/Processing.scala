@@ -116,7 +116,7 @@ object Processing {
 
   /** Transform the Event into values compatible with parquet */
   private def transform[F[_]: Async: RegistryLookup](badProcessor: BadRowProcessor, env: Environment[F]): Pipe[F, Batched, Transformed] =
-    _.evalMap { case Batched(events, parseFailures, entities, numBytes, tokens, earliestTstamp) =>
+    _.parEvalMap(env.cpuParallelism) { case Batched(events, parseFailures, entities, numBytes, tokens, earliestTstamp) =>
       for {
         _ <- Logger[F].debug(s"Processing batch of size ${events.size} and $numBytes bytes")
         resolveTypesResult <- NonAtomicFields.resolveTypes[F](env.resolver, entities, env.schemasToSkip)
@@ -135,7 +135,7 @@ object Processing {
     }
 
   private def sendToDatabricks[F[_]: Async](env: Environment[F]): Pipe[F, Serialized, Serialized] =
-    _.parEvalMap(env.batching.uploadConcurrency) { batch =>
+    _.parEvalMap(env.uploadParallelism) { batch =>
       if (batch.goodCount > 0)
         env.databricks.upload(batch.bytes).as(batch)
       else

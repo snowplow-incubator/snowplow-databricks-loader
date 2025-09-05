@@ -96,9 +96,9 @@ object PubsubConfigSpec {
     ),
     streams = PubsubFactoryConfig(PubsubUserAgent("Snowplow OSS", "databricks-loader"), None),
     batching = Config.Batching(
-      maxBytes          = 16000000,
-      maxDelay          = 1.second,
-      uploadConcurrency = 3
+      maxBytes                = 16000000,
+      maxDelay                = 1.second,
+      uploadParallelismFactor = 3
     ),
     retries = Config.Retries(
       setupErrors     = Retrying.Config.ForSetup(delay = 30.seconds),
@@ -114,6 +114,7 @@ object PubsubConfigSpec {
       moduleName      = None,
       moduleVersion   = None
     ),
+    cpuParallelismFactor = 0.75,
     monitoring = Config.Monitoring(
       metrics     = Config.Metrics(None),
       sentry      = None,
@@ -157,10 +158,11 @@ object PubsubConfigSpec {
     ),
     streams = PubsubFactoryConfig(PubsubUserAgent("Snowplow OSS", "databricks-loader"), None),
     batching = Config.Batching(
-      maxBytes          = 16000000,
-      maxDelay          = 1.second,
-      uploadConcurrency = 1
+      maxBytes                = 16000000,
+      maxDelay                = 1.second,
+      uploadParallelismFactor = 3
     ),
+    cpuParallelismFactor = 0.75,
     retries = Config.Retries(
       setupErrors     = Retrying.Config.ForSetup(delay = 30.seconds),
       transientErrors = Retrying.Config.ForTransient(delay = 1.second, attempts = 5)
