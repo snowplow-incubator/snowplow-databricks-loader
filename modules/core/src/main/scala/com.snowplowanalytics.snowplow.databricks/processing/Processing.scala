@@ -86,7 +86,7 @@ object Processing {
   ): EventProcessor[F] = { in =>
     val badProcessor = BadRowProcessor(env.appInfo.name, env.appInfo.version)
 
-    in.through(parseBytes(badProcessor))
+    in.through(parseBytes(badProcessor, env))
       .through(BatchUp.withTimeout(env.batching.maxBytes.toLong, env.batching.maxDelay))
       .through(transform(badProcessor, env))
       .through(sendFailedEvents(env, badProcessor))
@@ -98,8 +98,8 @@ object Processing {
   }
 
   /** Parse raw bytes into Event using analytics sdk */
-  private def parseBytes[F[_]: Sync](badProcessor: BadRowProcessor): Pipe[F, TokenedEvents, ParseResult] =
-    _.evalMap { case TokenedEvents(chunk, token) =>
+  private def parseBytes[F[_]: Async](badProcessor: BadRowProcessor, env: Environment[F]): Pipe[F, TokenedEvents, ParseResult] =
+    _.parEvalMap(env.cpuParallelism) { case TokenedEvents(chunk, token) =>
       for {
         numBytes <- Sync[F].delay(Foldable[Chunk].sumBytes(chunk))
         (badRows, events) <- Foldable[Chunk].traverseSeparateUnordered(chunk) { byteBuffer =>
