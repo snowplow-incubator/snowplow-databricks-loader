@@ -78,9 +78,15 @@
     # - Events are uploaded to Databricks after exceeding this duration, even if the `maxBytes` size has not been reached
     "maxDelay": "1 second"
 
-    # - How many batches can we send simultaneously over the network to Databricks.
-    "uploadConcurrency":  1
+    # - Controls how many batches can we send simultaneously over the network to Databricks.
+    # -- E.g. If there are 4 available processors, and uploadParallelismFactor = 3.5, then we send up to 14 batches in parallel
+    # -- Adjusting this value can cause the app to use more or less of the available CPU.
   }
+
+  # -- Controls how the app splits the workload into concurrent batches which can be run in parallel.
+  # -- E.g. If there are 4 available processors, and cpuParallelismFactor = 0.75, then we process 3 batches concurrently.
+  # -- Adjusting this value can cause the app to use more or less of the available CPU.
+  "cpuParallelismFactor": 0.75
 
   # Retry configuration for Databricks operation failures
   "retries": {

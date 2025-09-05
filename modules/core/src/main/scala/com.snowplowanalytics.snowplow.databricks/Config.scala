@@ -32,6 +32,7 @@ case class Config[+Factory, +Source, +Sink](
   output: Config.Output[Sink],
   streams: Factory,
   batching: Config.Batching,
+  cpuParallelismFactor: BigDecimal,
   retries: Config.Retries,
   telemetry: Telemetry.Config,
   monitoring: Config.Monitoring,
@@ -67,7 +68,7 @@ object Config {
   case class Batching(
     maxBytes: Int,
     maxDelay: FiniteDuration,
-    uploadConcurrency: Int
+    uploadParallelismFactor: BigDecimal
   )
 
   case class Retries(
