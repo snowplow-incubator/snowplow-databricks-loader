@@ -77,9 +77,9 @@ object MockEnvironment {
     for {
       state <- Resource.eval(Ref[IO].of(Results(Vector.empty, Vector.empty)))
       batching = Config.Batching(
-                   maxBytes          = 16000000,
-                   maxDelay          = 10.seconds,
-                   uploadConcurrency = 1
+                   maxBytes                = 16000000,
+                   maxDelay                = 10.seconds,
+                   uploadParallelismFactor = 1
                  )
       serializer <- ParquetSerializer.resource[IO](batching, CompressionCodecName.SNAPPY)
     } yield {
@@ -94,6 +94,8 @@ object MockEnvironment {
         appHealth               = testAppHealth(state),
         serializer              = serializer,
         batching                = batching,
+        cpuParallelism          = 1,
+        uploadParallelism       = 1,
         badRowMaxSize           = 1000000,
         schemasToSkip           = List.empty,
         exitOnMissingIgluSchema = false,

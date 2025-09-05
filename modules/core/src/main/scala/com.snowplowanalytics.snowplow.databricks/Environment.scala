@@ -21,6 +21,16 @@ import com.snowplowanalytics.snowplow.streams.{Factory, Sink, SourceAndAck}
 import com.snowplowanalytics.snowplow.databricks.processing.{DatabricksUploader, ParquetSerializer}
 import com.snowplowanalytics.snowplow.runtime.{AppHealth, AppInfo, HealthProbe, HttpClient, Webhook}
 
+/**
+ * Resources and runtime-derived configuration needed for processing events
+ *
+ * @param cpuParallelism
+ *   The processing Pipe involves several steps, some of which are cpu-intensive. We run
+ *   cpu-intensive steps in parallel, so that on big instances we can take advantage of all cores.
+ *   For each of those cpu-intensive steps, `cpuParallelism` controls the parallelism of that step.
+ *
+ * Other params are self-explanatory
+ */
 case class Environment[F[_]](
   appInfo: AppInfo,
   source: SourceAndAck[F],
@@ -32,6 +42,8 @@ case class Environment[F[_]](
   metrics: Metrics[F],
   appHealth: AppHealth.Interface[F, Alert, RuntimeService],
   batching: Config.Batching,
+  cpuParallelism: Int,
+  uploadParallelism: Int,
   badRowMaxSize: Int,
   schemasToSkip: List[SchemaCriterion],
   exitOnMissingIgluSchema: Boolean,
@@ -62,6 +74,8 @@ object Environment {
       databricks <- Resource.eval(DatabricksUploader.build[F](config.main.output.good))
       databricksWrapped = DatabricksUploader.withHandledErrors(databricks, appHealth, config.main.output.good, config.main.retries)
       serializer <- ParquetSerializer.resource(config.main.batching, config.main.output.good.compression)
+      cpuParallelism    = chooseCpuParallelism(config.main)
+      uploadParallelism = chooseUploadParallelism(config.main)
     } yield Environment(
       appInfo                 = appInfo,
       source                  = sourceAndAck,
@@ -73,6 +87,8 @@ object Environment {
       metrics                 = metrics,
       appHealth               = appHealth,
       batching                = config.main.batching,
+      cpuParallelism          = cpuParallelism,
+      uploadParallelism       = uploadParallelism,
       badRowMaxSize           = config.main.output.bad.maxRecordSize,
       schemasToSkip           = config.main.skipSchemas,
       exitOnMissingIgluSchema = config.main.exitOnMissingIgluSchema,
@@ -108,5 +124,26 @@ object Environment {
         .value
         .rethrow
     }
+
+  /**
+   * See the description of `cpuParallelism` on the [[Environment]] class
+   *
+   * For bigger instances (more cores) we want more parallelism, so that cpu-intensive steps can
+   * take advantage of all the cores.
+   */
+  private def chooseCpuParallelism(config: Config[Any, Any, Any]): Int =
+    multiplyByCpuAndRoundUp(config.cpuParallelismFactor)
+
+  /**
+   * For bigger instances (more cores) we produce batches more quickly, and so need higher upload
+   * parallelism so that uploading does not become bottleneck
+   */
+  private def chooseUploadParallelism(config: Config[Any, Any, Any]): Int =
+    multiplyByCpuAndRoundUp(config.batching.uploadParallelismFactor)
+
+  private def multiplyByCpuAndRoundUp(factor: BigDecimal): Int =
+    (Runtime.getRuntime.availableProcessors * factor)
+      .setScale(0, BigDecimal.RoundingMode.UP)
+      .toInt
 
 }
