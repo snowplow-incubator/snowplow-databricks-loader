@@ -23,6 +23,7 @@ import java.io.ByteArrayInputStream
 import java.util.UUID
 import java.time.{Instant, ZoneOffset}
 import java.time.format.DateTimeFormatter
+import java.net.UnknownHostException
 
 import com.snowplowanalytics.snowplow.databricks.{Alert, Config, RuntimeService}
 import com.snowplowanalytics.snowplow.runtime.{AppHealth, Retrying}
@@ -121,8 +122,22 @@ object DatabricksUploader {
       // PermissionDenied exception messages are clean, short and helpful
       s"Permission denied by Databricks: ${pd.getMessage}"
     case nf: NotFound =>
-      // NotFound exception messages are clean, short and helpful
-      s"Not Found: ${nf.getMessage}"
+      if (nf.getErrorCode == "FOUND") {
+        // If hostname returns 404, it returns NotFound exception
+        // with "FOUND" error code.
+        // We return static message because error message from exception
+        // contains response body from the hostname, and it might be verbose
+        // html source code as well.
+        "Invalid Databricks hostname"
+      } else {
+        // It returns NotFound exception for non-existing resources
+        // as well. However, error code is "NOT_FOUND" in those cases.
+        // NotFound exception messages are clean, short and helpful
+        // in those cases.
+        s"Not Found: ${nf.getMessage}"
+      }
+    case _: UnknownHostException =>
+      "Invalid Databricks hostname"
   }
 
 }

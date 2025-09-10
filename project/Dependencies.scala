@@ -21,7 +21,7 @@ object Dependencies {
     val parquet4s        = "2.19.0"
 
     // java
-    val databricks = "0.30.0"
+    val databricks = "0.62.0"
     val slf4j      = "2.0.16"
     val azureSdk   = "1.13.2"
     val sentry     = "7.14.0"
