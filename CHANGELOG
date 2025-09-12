@@ -1,0 +1,9 @@
+Version 0.2.0 (2025-09-12)
+--------------------------
+Parallelize CPU-intensive transforming step (#4)
+Bump databricks-sdk-java to 0.62.0 (#5)
+Upgrade dependencies to fix some vulnerabilities (#8)
+
+Version 0.1.0 (2025-09-04)
+--------------------------
+Initial release
