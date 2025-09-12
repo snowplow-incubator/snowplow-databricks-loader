@@ -21,13 +21,23 @@ object Dependencies {
     val parquet4s        = "2.19.0"
 
     // java
-    val databricks = "0.62.0"
-    val slf4j      = "2.0.16"
-    val azureSdk   = "1.13.2"
-    val sentry     = "7.14.0"
-    val jaxb       = "2.3.1"
-    val awsSdk2    = "2.27.16"
-    val hadoop     = "3.4.0"
+    val databricks       = "0.62.0"
+    val slf4j            = "2.0.16"
+    val azureSdk         = "1.13.2"
+    val sentry           = "7.14.0"
+    val jaxb             = "2.3.1"
+    val awsSdk2          = "2.27.16"
+    val hadoop           = "3.4.2"
+    val avro             = "1.11.4" // Version override
+    val commonsBeanutils = "1.11.0" // Version override
+    val dnsJava          = "3.6.0" // Version override
+    val netty            = "4.1.125.Final" // Version override
+    val commonsCompress  = "1.26.0" // Version override
+    val commonsLang3     = "3.18.0" // Version override
+    val nimbusJoseJwt    = "9.37.2" // Version override
+    val kafkaClients     = "3.9.1" // Version override
+    val jsonSmart        = "2.5.2" // Version override
+    val protobufJava     = "3.25.5" // Version override
 
     // Snowplow
     val streams    = "0.13.1"
@@ -56,6 +66,18 @@ object Dependencies {
   val hadoopClient = ("org.apache.hadoop" % "hadoop-client" % V.hadoop)
     .exclude("com.jcraft", "jsch")
     .exclude("org.apache.zookeeper", "zookeeper")
+  val avro             = "org.apache.avro"     % "avro"              % V.avro
+  val commonsBeanutils = "commons-beanutils"   % "commons-beanutils" % V.commonsBeanutils
+  val dnsJava          = "dnsjava"             % "dnsjava"           % V.dnsJava
+  val nettyCodecHttp   = "io.netty"            % "netty-codec-http"  % V.netty
+  val nettyCodecHttp2  = "io.netty"            % "netty-codec-http2" % V.netty
+  val nettyHandler     = "io.netty"            % "netty-handler"     % V.netty
+  val commonsCompress  = "org.apache.commons"  % "commons-compress"  % V.commonsCompress
+  val commonsLang3     = "org.apache.commons"  % "commons-lang3"     % V.commonsLang3
+  val nimbusJoseJwt    = "com.nimbusds"        % "nimbus-jose-jwt"   % V.nimbusJoseJwt
+  val kafkaClients     = "org.apache.kafka"    % "kafka-clients"     % V.kafkaClients
+  val jsonSmart        = "net.minidev"         % "json-smart"        % V.jsonSmart
+  val protobufJava     = "com.google.protobuf" % "protobuf-java"     % V.protobufJava
 
   val streamsCore      = "com.snowplowanalytics" %% "streams-core"             % V.streams
   val kinesis          = "com.snowplowanalytics" %% "kinesis"                  % V.streams
@@ -81,6 +103,15 @@ object Dependencies {
     decline,
     sentry,
     circeGenericExtra,
+    avro, // for security vulnerabilities
+    commonsBeanutils, // for security vulnerabilities
+    dnsJava, // for security vulnerabilities
+    nettyCodecHttp, // for security vulnerabilities
+    nettyCodecHttp2, // for security vulnerabilities
+    nettyHandler, // for security vulnerabilities
+    commonsCompress, // for security vulnerabilities
+    commonsLang3, // for security vulnerabilities
+    nimbusJoseJwt, // for security vulnerabilities
     specs2            % Test,
     catsEffectSpecs2  % Test,
     catsEffectTestkit % Test,
@@ -91,6 +122,9 @@ object Dependencies {
   val kafkaDependencies = Seq(
     kafka,
     azureIdentity,
+    kafkaClients, // for security vulnerabilities
+    jsonSmart, // for security vulnerabilities
+    protobufJava, // for security vulnerabilities
     slf4j            % Runtime,
     log4jOverSlf4j   % Runtime,
     jaxb             % Runtime,
