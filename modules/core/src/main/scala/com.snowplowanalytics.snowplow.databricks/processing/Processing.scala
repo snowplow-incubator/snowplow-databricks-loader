@@ -123,7 +123,7 @@ object Processing {
         nonAtomicFields <- possiblyExitOnClashingIgluSchemas(env, resolveTypesResult)
         _ <- possiblyExitOnMissingIgluSchema(env, nonAtomicFields)
         TransformUtils.TransformResult(moreBad, good) <- TransformUtils.transform[F](badProcessor, events, nonAtomicFields, env.devFeatures)
-        schema = ParquetSchema.forBatch(nonAtomicFields.fields.map(_.mergedField))
+        schema = ParquetSchema.forBatch(nonAtomicFields.fields.flatMap(tte => tte.mergedField :: tte.recoveries.map(_._2)))
       } yield Transformed(good, schema, parseFailures.prepend(moreBad), tokens, earliestTstamp)
     }
 
