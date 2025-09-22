@@ -17,7 +17,7 @@ Basic usage:
 ```bash
 docker run \
   -v /path/to/config.hocon:/var/config.hocon \
-  snowplow/databricks-loader-<flavour>:0.2.0 \
+  snowplow/databricks-loader-<flavour>:0.2.1 \
   --config=/var/config.hocon \
   --iglu-config=/var/iglu.hocon
 ```
@@ -82,7 +82,7 @@ Licensed under the [Snowplow Limited Use License Agreement][license]. _(If you a
 [build-image]: https://github.com/snowplow-incubator/databricks-loader/workflows/CI/badge.svg
 [build]: https://github.com/snowplow-incubator/databricks-loader/actions/workflows/ci.yml
 
-[release-image]: https://img.shields.io/badge/release-0.2.0-blue.svg?style=flat
+[release-image]: https://img.shields.io/badge/release-0.2.1-blue.svg?style=flat
 [releases]: https://github.com/snowplow-incubator/databricks-loader/releases
 
 [license]: https://docs.snowplow.io/limited-use-license-1.1
