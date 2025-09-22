@@ -19,6 +19,7 @@ object Dependencies {
     val circe            = "0.14.4"
     val betterMonadicFor = "0.3.1"
     val parquet4s        = "2.19.0"
+    val fs2              = "3.12.2" // Version override
 
     // java
     val databricks   = "0.62.0"
@@ -46,6 +47,7 @@ object Dependencies {
   val decline           = "com.monovore" %% "decline-effect"       % V.decline
   val circeGenericExtra = "io.circe"     %% "circe-generic-extras" % V.circe
   val betterMonadicFor  = "com.olegpy"   %% "better-monadic-for"   % V.betterMonadicFor
+  val fs2io             = "co.fs2"       %% "fs2-io"               % V.fs2
   val parquet4s = ("com.github.mjakubowski84" %% "parquet4s-fs2" % V.parquet4s)
     .exclude("com.github.luben", "zstd-jni")
 
@@ -90,6 +92,7 @@ object Dependencies {
     decline,
     sentry,
     circeGenericExtra,
+    fs2io, // for security vulnerabilities
     nettyCodecHttp, // for security vulnerabilities
     nettyCodecHttp2, // for security vulnerabilities
     commonsLang3, // for security vulnerabilities
