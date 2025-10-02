@@ -35,7 +35,7 @@ object Dependencies {
     val jsonSmart    = "2.5.2" // Version override
 
     // Snowplow
-    val streams    = "0.13.1"
+    val streams    = "0.14.1"
     val igluClient = "4.0.0"
 
     // tests
