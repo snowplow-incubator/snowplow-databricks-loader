@@ -70,10 +70,12 @@ object PubsubConfigSpec {
     input = PubsubSourceConfig(
       subscription            = PubsubSourceConfig.Subscription("my-project", "snowplow-enriched"),
       parallelPullFactor      = BigDecimal(0.5),
-      durationPerAckExtension = 1.minute,
+      durationPerAckExtension = 15.seconds,
       minRemainingAckDeadline = BigDecimal(0.1),
       maxMessagesPerPull      = 1000,
-      debounceRequests        = 100.millis
+      debounceRequests        = 100.millis,
+      streamingPull           = true,
+      retries                 = PubsubSourceConfig.Retries(PubsubSourceConfig.TransientErrorRetrying(delay = 100.millis, attempts = 10))
     ),
     output = Config.Output(
       good = Config.Databricks(
@@ -89,7 +91,8 @@ object PubsubConfigSpec {
         sink = PubsubSinkConfigM[Id](
           topic                = PubsubSinkConfig.Topic("my-project", "snowplow-bad"),
           batchSize            = 1000,
-          requestByteThreshold = 1000000
+          requestByteThreshold = 1000000,
+          retries              = PubsubSinkConfig.Retries(PubsubSinkConfig.TransientErrorRetrying(delay = 100.millis, attempts = 10))
         ),
         maxRecordSize = 9000000
       )
@@ -132,10 +135,12 @@ object PubsubConfigSpec {
     input = PubsubSourceConfig(
       subscription            = PubsubSourceConfig.Subscription("myproject", "snowplow-enriched"),
       parallelPullFactor      = BigDecimal(0.5),
-      durationPerAckExtension = 1.minute,
+      durationPerAckExtension = 15.seconds,
       minRemainingAckDeadline = BigDecimal(0.1),
       maxMessagesPerPull      = 1000,
-      debounceRequests        = 100.millis
+      debounceRequests        = 100.millis,
+      streamingPull           = true,
+      retries                 = PubsubSourceConfig.Retries(PubsubSourceConfig.TransientErrorRetrying(delay = 100.millis, attempts = 10))
     ),
     output = Config.Output(
       good = Config.Databricks(
@@ -151,7 +156,8 @@ object PubsubConfigSpec {
         sink = PubsubSinkConfigM[Id](
           topic                = PubsubSinkConfig.Topic("myproject", "snowplow-bad"),
           batchSize            = 100,
-          requestByteThreshold = 1000000
+          requestByteThreshold = 1000000,
+          retries              = PubsubSinkConfig.Retries(PubsubSinkConfig.TransientErrorRetrying(delay = 100.millis, attempts = 10))
         ),
         maxRecordSize = 9000000
       )
