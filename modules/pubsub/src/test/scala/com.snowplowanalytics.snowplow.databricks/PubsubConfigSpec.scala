@@ -85,7 +85,8 @@ object PubsubConfigSpec {
         catalog     = "snowplow",
         schema      = "atomic",
         volume      = "snowplow",
-        compression = CompressionCodecName.SNAPPY
+        compression = CompressionCodecName.SNAPPY,
+        httpTimeout = 20.seconds
       ),
       bad = Config.SinkWithMaxSize(
         sink = PubsubSinkConfigM[Id](
@@ -150,7 +151,8 @@ object PubsubConfigSpec {
         catalog     = "snowplow",
         schema      = "atomic",
         volume      = "snowplow",
-        compression = CompressionCodecName.SNAPPY
+        compression = CompressionCodecName.SNAPPY,
+        httpTimeout = 20.seconds
       ),
       bad = Config.SinkWithMaxSize(
         sink = PubsubSinkConfigM[Id](

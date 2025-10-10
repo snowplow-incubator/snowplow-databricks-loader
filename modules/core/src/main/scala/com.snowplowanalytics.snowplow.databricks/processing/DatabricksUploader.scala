@@ -100,6 +100,7 @@ object DatabricksUploader {
       c.setClientId(oauth.clientId)
       c.setClientSecret(oauth.clientSecret)
     }
+    c.setHttpTimeoutSeconds(config.httpTimeout.toSeconds.toInt)
     c
   }
 
