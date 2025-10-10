@@ -14,7 +14,7 @@ import cats.implicits._
 import cats.effect.{Async, Sync}
 import com.databricks.sdk.WorkspaceClient
 import com.databricks.sdk.core.{DatabricksConfig, UserAgent}
-import com.databricks.sdk.core.error.platform.{NotFound, PermissionDenied, Unauthenticated}
+import com.databricks.sdk.core.error.platform.{AlreadyExists, NotFound, PermissionDenied, Unauthenticated}
 import com.databricks.sdk.service.files.{FilesAPI, UploadRequest}
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -74,7 +74,13 @@ object DatabricksUploader {
       for {
         _ <- Logger[F].debug(show"Uploading file of size ${bytes.available} to $path")
         req = new UploadRequest().setFilePath(path).setContents(bytes).setOverwrite(false)
-        _ <- Sync[F].blocking(api.upload(req))
+        _ <- Sync[F]
+               .blocking(api.upload(req))
+               .recoverWith { case _: AlreadyExists =>
+                 Logger[F].info(
+                   show"Trying to upload to $path. However, the file in this path already exists. Therefore, this upload will be ignored as previous upload must have already been successful"
+                 )
+               }
       } yield ()
   }
 
