@@ -83,7 +83,8 @@ object KafkaConfigSpec {
         catalog     = "snowplow",
         schema      = "atomic",
         volume      = "snowplow",
-        compression = CompressionCodecName.SNAPPY
+        compression = CompressionCodecName.SNAPPY,
+        httpTimeout = 20.seconds
       ),
       bad = Config.SinkWithMaxSize(
         sink = KafkaSinkConfigM[Id](
@@ -157,7 +158,8 @@ object KafkaConfigSpec {
         catalog     = "snowplow",
         schema      = "atomic",
         volume      = "snowplow",
-        compression = CompressionCodecName.SNAPPY
+        compression = CompressionCodecName.SNAPPY,
+        httpTimeout = 20.seconds
       ),
       bad = Config.SinkWithMaxSize(
         sink = KafkaSinkConfigM[Id](

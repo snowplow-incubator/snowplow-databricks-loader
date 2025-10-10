@@ -60,7 +60,8 @@ object Config {
     catalog: String,
     schema: String,
     volume: String,
-    compression: CompressionCodecName
+    compression: CompressionCodecName,
+    httpTimeout: FiniteDuration
   )
 
   case class DatabricksOAuth(clientId: String, clientSecret: String)

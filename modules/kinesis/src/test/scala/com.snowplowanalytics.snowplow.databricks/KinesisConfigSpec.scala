@@ -83,7 +83,8 @@ object KinesisConfigSpec {
         catalog     = "snowplow",
         schema      = "atomic",
         volume      = "snowplow",
-        compression = CompressionCodecName.SNAPPY
+        compression = CompressionCodecName.SNAPPY,
+        httpTimeout = 20.seconds
       ),
       bad = Config.SinkWithMaxSize(
         sink = KinesisSinkConfigM[Id](
@@ -153,7 +154,8 @@ object KinesisConfigSpec {
         catalog     = "snowplow",
         schema      = "atomic",
         volume      = "snowplow",
-        compression = CompressionCodecName.SNAPPY
+        compression = CompressionCodecName.SNAPPY,
+        httpTimeout = 20.seconds
       ),
       bad = Config.SinkWithMaxSize(
         sink = KinesisSinkConfigM[Id](

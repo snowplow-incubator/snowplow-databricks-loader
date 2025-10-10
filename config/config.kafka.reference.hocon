@@ -47,6 +47,9 @@
 
       # -- Compression algorithm for the uploaded parquet file
       "compression": "snappy"
+
+      # -- Timeout duration of Databricks SDK's HTTP client
+      "httpTimeout": "20 seconds"
     }
 
     "bad": {
