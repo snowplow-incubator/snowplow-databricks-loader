@@ -44,8 +44,7 @@ class DatabricksUploaderSpec extends Specification with CatsEffect {
       finalState <- state.get
       errorCount = finalState.actions.count(_ == MockEnvironment.Action.IncrementedDatabricksErrors)
     } yield List(
-      result.isLeft must beTrue,
-      result.left.toOption must beSome(testException),
+      result must beLeft(testException),
       errorCount must beEqualTo(1)
     ).reduce(_ and _)
   }
@@ -59,7 +58,7 @@ class DatabricksUploaderSpec extends Specification with CatsEffect {
       result <- uploader.upload(testBytes).attempt
       finalState <- state.get
     } yield List(
-      result.isRight must beTrue,
+      result must beRight,
       finalState.actions must not(contain(MockEnvironment.Action.IncrementedDatabricksErrors: MockEnvironment.Action))
     ).reduce(_ and _)
 
@@ -73,7 +72,7 @@ class DatabricksUploaderSpec extends Specification with CatsEffect {
       finalState <- state.get
       errorCount = finalState.actions.count(_ == MockEnvironment.Action.IncrementedDatabricksErrors)
     } yield List(
-      result.isRight must beTrue, // Eventually succeeds after retries
+      result must beRight, // Eventually succeeds after retries
       errorCount must beEqualTo(3) // Should count each failed attempt
     ).reduce(_ and _)
 }
