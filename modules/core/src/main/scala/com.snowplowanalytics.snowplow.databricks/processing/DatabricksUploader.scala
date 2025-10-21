@@ -42,17 +42,18 @@ object DatabricksUploader {
 
   private implicit def logger[F[_]: Sync]: Logger[F] = Slf4jLogger.getLogger[F]
 
-  def build[F[_]: Sync](config: Config.Databricks, metrics: Metrics[F]): F[DatabricksUploader[F]] =
+  def build[F[_]: Sync](config: Config.Databricks): F[DatabricksUploader[F]] =
     for {
       _ <- Sync[F].delay(UserAgent.withProduct("snowplow-loader", "0.0.0"))
       ws <- Sync[F].delay(new WorkspaceClient(databricksConfig(config)))
-    } yield impl(ws.files, metrics)
+    } yield impl(ws.files)
 
   def withHandledErrors[F[_]: Async](
     underlying: DatabricksUploader[F],
     appHealth: AppHealth.Interface[F, Alert, RuntimeService],
     config: Config.Databricks,
-    retries: Config.Retries
+    retries: Config.Retries,
+    metrics: Metrics[F]
   ): WithHandledErrors[F] = new WithHandledErrors[F] {
     def upload(bytes: ByteArrayInputStream): F[Unit] =
       generatePath(config).flatMap { path =>
@@ -66,25 +67,24 @@ object DatabricksUploader {
         ) {
           // Reset first, in case this is a retry
           Sync[F].delay(bytes.reset()) >>
-            underlying.upload(bytes, path)
+            underlying.upload(bytes, path).handleErrorWith { e =>
+              metrics.incrementDatabricksErrors() *> Sync[F].raiseError(e)
+            }
         } <* appHealth.beHealthyForSetup
       }
   }
 
-  private[processing] def impl[F[_]: Sync](api: FilesAPI, metrics: Metrics[F]): DatabricksUploader[F] = new DatabricksUploader[F] {
+  private def impl[F[_]: Sync](api: FilesAPI): DatabricksUploader[F] = new DatabricksUploader[F] {
     def upload(bytes: ByteArrayInputStream, path: String): F[Unit] =
       for {
         _ <- Logger[F].debug(show"Uploading file of size ${bytes.available} to $path")
         req = new UploadRequest().setFilePath(path).setContents(bytes).setOverwrite(false)
         _ <- Sync[F]
                .blocking(api.upload(req))
-               .recoverWith {
-                 case _: AlreadyExists =>
-                   Logger[F].info(
-                     show"Trying to upload to $path. However, the file in this path already exists. Therefore, this upload will be ignored as previous upload must have already been successful"
-                   )
-                 case e =>
-                   metrics.incrementDatabricksErrors() *> Sync[F].raiseError(e)
+               .recoverWith { case _: AlreadyExists =>
+                 Logger[F].info(
+                   show"Trying to upload to $path. However, the file in this path already exists. Therefore, this upload will be ignored as previous upload must have already been successful"
+                 )
                }
       } yield ()
   }
