@@ -72,7 +72,7 @@ object Environment {
                    .onError(_ => Resource.eval(appHealth.beUnhealthyForRuntimeService(RuntimeService.BadSink)))
       metrics <- Resource.eval(Metrics.build(config.main.monitoring.metrics, sourceAndAck))
       databricks <- Resource.eval(DatabricksUploader.build[F](config.main.output.good))
-      databricksWrapped = DatabricksUploader.withHandledErrors(databricks, appHealth, config.main.output.good, config.main.retries)
+      databricksWrapped = DatabricksUploader.withHandledErrors(databricks, appHealth, config.main.output.good, config.main.retries, metrics)
       serializer <- ParquetSerializer.resource(config.main.batching, config.main.output.good.compression)
       cpuParallelism    = chooseCpuParallelism(config.main)
       uploadParallelism = chooseUploadParallelism(config.main)

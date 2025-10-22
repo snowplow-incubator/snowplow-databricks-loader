@@ -48,6 +48,8 @@ object MockEnvironment {
     case class AddedBadCountMetric(count: Long) extends Action
     case class SetLatencyMetric(millis: FiniteDuration) extends Action
     case class SetE2ELatencyMetric(millis: FiniteDuration) extends Action
+    case object IncrementedDatabricksErrors extends Action
+    case object IncrementedSetupErrors extends Action
     case class BecameUnhealthy(service: RuntimeService) extends Action
     case class BecameHealthy(service: RuntimeService) extends Action
   }
@@ -179,6 +181,12 @@ object MockEnvironment {
 
     def setE2ELatency(latency: FiniteDuration): IO[Unit] =
       ref.update(_.withAction(SetE2ELatencyMetric(latency)))
+
+    def incrementDatabricksErrors(): IO[Unit] =
+      ref.update(_.withAction(IncrementedDatabricksErrors))
+
+    def incrementSetupErrors(): IO[Unit] =
+      ref.update(_.withAction(IncrementedSetupErrors))
 
     def report: Stream[IO, Nothing] = Stream.never[IO]
   }

@@ -28,6 +28,8 @@ import java.net.UnknownHostException
 import com.snowplowanalytics.snowplow.databricks.{Alert, Config, RuntimeService}
 import com.snowplowanalytics.snowplow.runtime.{AppHealth, Retrying}
 
+import com.snowplowanalytics.snowplow.databricks.Metrics
+
 trait DatabricksUploader[F[_]] {
   def upload(bytes: ByteArrayInputStream, filename: String): F[Unit]
 }
@@ -50,7 +52,8 @@ object DatabricksUploader {
     underlying: DatabricksUploader[F],
     appHealth: AppHealth.Interface[F, Alert, RuntimeService],
     config: Config.Databricks,
-    retries: Config.Retries
+    retries: Config.Retries,
+    metrics: Metrics[F]
   ): WithHandledErrors[F] = new WithHandledErrors[F] {
     def upload(bytes: ByteArrayInputStream): F[Unit] =
       generatePath(config).flatMap { path =>
@@ -64,7 +67,10 @@ object DatabricksUploader {
         ) {
           // Reset first, in case this is a retry
           Sync[F].delay(bytes.reset()) >>
-            underlying.upload(bytes, path)
+            underlying.upload(bytes, path).onError { e =>
+              if (isSetupError.isDefinedAt(e)) metrics.incrementSetupErrors()
+              else metrics.incrementDatabricksErrors()
+            }
         } <* appHealth.beHealthyForSetup
       }
   }
