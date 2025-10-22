@@ -26,6 +26,8 @@ trait Metrics[F[_]] {
   def addBad(count: Long): F[Unit]
   def setLatency(latency: FiniteDuration): F[Unit]
   def setE2ELatency(latency: FiniteDuration): F[Unit]
+  def incrementDatabricksErrors(): F[Unit]
+  def incrementSetupErrors(): F[Unit]
 
   def report: Stream[F, Nothing]
 }
@@ -39,20 +41,31 @@ object Metrics {
     good: Long,
     bad: Long,
     latency: FiniteDuration,
-    e2eLatency: Option[FiniteDuration]
+    e2eLatency: Option[FiniteDuration],
+    databricksErrors: Long,
+    setupErrors: Long
   ) extends CommonMetrics.State {
-    def toKVMetrics: List[CommonMetrics.KVMetric] =
-      List(
+    def toKVMetrics: List[CommonMetrics.KVMetric] = {
+      val base = List(
         KVMetric.CountGood(good),
         KVMetric.CountBad(bad),
         KVMetric.Latency(latency)
-      ) ++ e2eLatency.map(KVMetric.E2ELatency(_))
+      )
+
+      val optional = List(
+        e2eLatency.map(KVMetric.E2ELatency(_)),
+        if (databricksErrors > 0) Some(KVMetric.DatabricksErrors(databricksErrors)) else None,
+        if (setupErrors > 0) Some(KVMetric.SetupErrors(setupErrors)) else None
+      ).flatten
+
+      base ++ optional
+    }
   }
 
   private object State {
     def initialize[F[_]: Functor](sourceAndAck: SourceAndAck[F]): F[State] =
       sourceAndAck.currentStreamLatency.map { latency =>
-        State(0L, 0L, latency.getOrElse(Duration.Zero), None)
+        State(0L, 0L, latency.getOrElse(Duration.Zero), None, 0L, 0L)
       }
   }
 
@@ -73,6 +86,10 @@ object Metrics {
           val newLatency = state.e2eLatency.fold(latency)(_.max(latency))
           state.copy(e2eLatency = Some(newLatency))
         }
+      def incrementDatabricksErrors(): F[Unit] =
+        ref.update(s => s.copy(databricksErrors = s.databricksErrors + 1))
+      def incrementSetupErrors(): F[Unit] =
+        ref.update(s => s.copy(setupErrors = s.setupErrors + 1))
     }
 
   private object KVMetric {
@@ -99,6 +116,18 @@ object Metrics {
       val key        = "e2e_latency_millis"
       val value      = v.toMillis.toString
       val metricType = CommonMetrics.MetricType.Gauge
+    }
+
+    final case class DatabricksErrors(v: Long) extends CommonMetrics.KVMetric {
+      val key        = "databricks_errors"
+      val value      = v.toString
+      val metricType = CommonMetrics.MetricType.Count
+    }
+
+    final case class SetupErrors(v: Long) extends CommonMetrics.KVMetric {
+      val key        = "setup_errors"
+      val value      = v.toString
+      val metricType = CommonMetrics.MetricType.Count
     }
 
   }
