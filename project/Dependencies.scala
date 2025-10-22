@@ -22,18 +22,18 @@ object Dependencies {
     val fs2              = "3.12.2" // Version override
 
     // java
-    val databricks   = "0.62.0"
-    val slf4j        = "2.0.16"
-    val azureSdk     = "1.13.2"
-    val sentry       = "7.14.0"
-    val jaxb         = "2.3.1"
-    val awsSdk2      = "2.27.16"
-    val hadoop       = "3.4.2"
-    val netty        = "4.1.128.Final" // Version override
-    val commonsLang3 = "3.18.0" // Version override
-    val kafkaClients = "3.9.1" // Version override
-    val jsonSmart    = "2.5.2" // Version override
-    val bouncycastle = "1.79" // Version override
+    val databricks    = "0.62.0"
+    val slf4j         = "2.0.16"
+    val azureSdk      = "1.13.2"
+    val sentry        = "7.14.0"
+    val jaxb          = "2.3.1"
+    val awsSdk2       = "2.27.16"
+    val hadoop        = "3.4.2"
+    val netty         = "4.1.128.Final" // Version override
+    val commonsLang3  = "3.18.0" // Version override
+    val kafkaClients  = "3.9.1" // Version override
+    val jsonSmart     = "2.5.2" // Version override
+    val bouncycastle  = "1.79" // Version override
     val nimbusJoseJwt = "9.37.4" // Version override
 
     // Snowplow
