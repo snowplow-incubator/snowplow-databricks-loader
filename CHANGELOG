@@ -1,3 +1,13 @@
+Version 0.3.0 (2025-10-22)
+--------------------------
+Fix vulnerabilities (#18)
+Add databricks_errors and setup_errors metrics (#16)
+Decrease Databricks SDK's HTTP client timeout (#15)
+Recover from 'AlreadyExists' exception (#14)
+Bump common-streams to 0.14.1 (#13)
+Add unit tests for various self-describing field scenarios (#12)
+Add CLAUDE.md
+
 Version 0.2.1 (2025-09-22)
 --------------------------
 Fix to work with recovery columns (#9)
