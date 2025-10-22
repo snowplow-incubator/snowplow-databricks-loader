@@ -67,8 +67,9 @@ object DatabricksUploader {
         ) {
           // Reset first, in case this is a retry
           Sync[F].delay(bytes.reset()) >>
-            underlying.upload(bytes, path).onError { _ =>
-              metrics.incrementDatabricksErrors()
+            underlying.upload(bytes, path).onError { e =>
+              if (isSetupError.isDefinedAt(e)) metrics.incrementSetupErrors()
+              else metrics.incrementDatabricksErrors()
             }
         } <* appHealth.beHealthyForSetup
       }
