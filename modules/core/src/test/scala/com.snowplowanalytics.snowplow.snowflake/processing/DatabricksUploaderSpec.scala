@@ -21,6 +21,8 @@ import cats.effect.testing.specs2.CatsEffect
 import com.snowplowanalytics.snowplow.runtime.{AppHealth, Retrying}
 import com.snowplowanalytics.snowplow.databricks.{Alert, RuntimeService}
 import com.snowplowanalytics.snowplow.databricks.{Config, MockEnvironment}
+import com.databricks.sdk.core.DatabricksException
+import com.databricks.sdk.core.error.platform.Unauthenticated
 
 class DatabricksUploaderSpec extends Specification with CatsEffect {
   import DatabricksUploaderSpec._
@@ -30,6 +32,7 @@ class DatabricksUploaderSpec extends Specification with CatsEffect {
     Increment databricks_errors metric when upload fails $e1
     Not increment databricks_errors metric when upload succeeds $e2
     Increment databricks_errors metric once per retry attempt $e3
+    Increment setup_errors metric when setup error occurs $e4
   """
 
   def e1 = {
@@ -75,6 +78,27 @@ class DatabricksUploaderSpec extends Specification with CatsEffect {
       result must beRight, // Eventually succeeds after retries
       errorCount must beEqualTo(3) // Should count each failed attempt
     ).reduce(_ and _)
+
+  def e4 = {
+    val wrappedException =
+      new DatabricksException("oauth-m2m auth: Failed to refresh credentials: invalid_client", new Unauthenticated("invalid_client", null))
+
+    for {
+      state <- Ref[IO].of(MockEnvironment.Results(Vector.empty, Vector.empty))
+      metrics = MockEnvironment.testMetrics(state)
+      // Fail once with wrapped exception, then succeed
+      underlying = failingNTimesThenSuccessUploader(1, Some(wrappedException))
+      uploader   = DatabricksUploader.withHandledErrors(underlying, testAppHealth, testConfig, testRetries, metrics)
+      result <- uploader.upload(testBytes).attempt
+      finalState <- state.get
+      setupErrorCount      = finalState.actions.count(_ == MockEnvironment.Action.IncrementedSetupErrors)
+      databricksErrorCount = finalState.actions.count(_ == MockEnvironment.Action.IncrementedDatabricksErrors)
+    } yield List(
+      result must beRight, // Should eventually succeed after retry
+      setupErrorCount must beEqualTo(1),
+      databricksErrorCount must beEqualTo(0)
+    ).reduce(_ and _)
+  }
 }
 
 object DatabricksUploaderSpec {
@@ -122,15 +146,17 @@ object DatabricksUploaderSpec {
   }
 
   /** Mock DatabricksUploader that fails N times then succeeds */
-  def failingNTimesThenSuccessUploader(failureCount: Int): DatabricksUploader[IO] = new DatabricksUploader[IO] {
-    private val counter = new java.util.concurrent.atomic.AtomicInteger(0)
-    def upload(bytes: ByteArrayInputStream, path: String): IO[Unit] = {
-      val attempt = counter.incrementAndGet()
-      if (attempt <= failureCount) {
-        IO.raiseError(new RuntimeException(s"Databricks API failure (attempt $attempt)"))
-      } else {
-        IO.unit
+  def failingNTimesThenSuccessUploader(failureCount: Int, exception: Option[Throwable] = None): DatabricksUploader[IO] =
+    new DatabricksUploader[IO] {
+      private val counter = new java.util.concurrent.atomic.AtomicInteger(0)
+      def upload(bytes: ByteArrayInputStream, path: String): IO[Unit] = {
+        val attempt = counter.incrementAndGet()
+        if (attempt <= failureCount) {
+          val ex = exception.getOrElse(new RuntimeException(s"Databricks API failure (attempt $attempt)"))
+          IO.raiseError(ex)
+        } else {
+          IO.unit
+        }
       }
     }
-  }
 }

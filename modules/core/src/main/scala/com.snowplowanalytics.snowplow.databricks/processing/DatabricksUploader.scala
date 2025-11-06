@@ -68,7 +68,7 @@ object DatabricksUploader {
           // Reset first, in case this is a retry
           Sync[F].delay(bytes.reset()) >>
             underlying.upload(bytes, path).onError { e =>
-              if (isSetupError.isDefinedAt(e)) metrics.incrementSetupErrors()
+              if (isSetupErrorInChain(e)) metrics.incrementSetupErrors()
               else metrics.incrementDatabricksErrors()
             }
         } <* appHealth.beHealthyForSetup
@@ -152,5 +152,11 @@ object DatabricksUploader {
     case _: UnknownHostException =>
       "Invalid Databricks hostname"
   }
+
+  // Checks if an exception or any exception in its cause chain is a setup error
+  private def isSetupErrorInChain(throwable: Throwable): Boolean =
+    Iterator
+      .unfold(throwable)(t => Option(t).map(ex => (ex, ex.getCause)))
+      .exists(isSetupError.isDefinedAt)
 
 }
