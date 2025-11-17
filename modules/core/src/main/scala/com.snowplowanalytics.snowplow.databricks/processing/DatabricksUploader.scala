@@ -14,7 +14,7 @@ import cats.implicits._
 import cats.effect.{Async, Sync}
 import com.databricks.sdk.WorkspaceClient
 import com.databricks.sdk.core.{DatabricksConfig, UserAgent}
-import com.databricks.sdk.core.error.platform.{AlreadyExists, NotFound, PermissionDenied, Unauthenticated}
+import com.databricks.sdk.core.error.platform.{NotFound, PermissionDenied, Unauthenticated}
 import com.databricks.sdk.service.files.{FilesAPI, UploadRequest}
 import org.typelevel.log4cats.Logger
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -56,23 +56,29 @@ object DatabricksUploader {
     metrics: Metrics[F]
   ): WithHandledErrors[F] = new WithHandledErrors[F] {
     def upload(bytes: ByteArrayInputStream): F[Unit] =
-      generatePath(config).flatMap { path =>
-        Retrying.withRetries(
-          appHealth,
-          retries.transientErrors,
-          retries.setupErrors,
-          RuntimeService.DatabricksUploader,
-          Alert.FailedToUploadFile,
-          isSetupError
-        ) {
-          // Reset first, in case this is a retry
-          Sync[F].delay(bytes.reset()) >>
-            underlying.upload(bytes, path).onError { e =>
-              if (isSetupErrorInChain(e)) metrics.incrementSetupErrors()
-              else metrics.incrementDatabricksErrors()
-            }
-        } <* appHealth.beHealthyForSetup
-      }
+      for {
+        uuid <- Sync[F].delay(UUID.randomUUID)
+        now <- Sync[F].realTimeInstant
+        _ <- Retrying.withRetries(
+               appHealth,
+               retries.transientErrors,
+               retries.setupErrors,
+               RuntimeService.DatabricksUploader,
+               Alert.FailedToUploadFile,
+               isSetupError
+             ) { attemptCounter =>
+               for {
+                 // Reset first, in case this is a retry
+                 _ <- Sync[F].delay(bytes.reset())
+                 path = generatePath(config, uuid, now, attemptCounter)
+                 _ <- underlying.upload(bytes, path).onError { e =>
+                        if (isSetupErrorInChain(e)) metrics.incrementSetupErrors()
+                        else metrics.incrementDatabricksErrors()
+                      }
+               } yield ()
+             }
+        _ <- appHealth.beHealthyForSetup
+      } yield ()
   }
 
   private def impl[F[_]: Sync](api: FilesAPI): DatabricksUploader[F] = new DatabricksUploader[F] {
@@ -80,23 +86,20 @@ object DatabricksUploader {
       for {
         _ <- Logger[F].debug(show"Uploading file of size ${bytes.available} to $path")
         req = new UploadRequest().setFilePath(path).setContents(bytes).setOverwrite(false)
-        _ <- Sync[F]
-               .blocking(api.upload(req))
-               .recoverWith { case _: AlreadyExists =>
-                 Logger[F].info(
-                   show"Trying to upload to $path. However, the file in this path already exists. Therefore, this upload will be ignored as previous upload must have already been successful"
-                 )
-               }
+        _ <- Sync[F].blocking(api.upload(req))
       } yield ()
   }
 
-  private def generatePath[F[_]: Sync](config: Config.Databricks): F[String] =
-    for {
-      uuid <- Sync[F].delay(UUID.randomUUID)
-      now <- Sync[F].realTimeInstant
-      partition = timePartition(now)
-      name      = filename(config, now, uuid)
-    } yield s"/Volumes/${config.catalog}/${config.schema}/${config.volume}/events/$partition/$name"
+  private def generatePath(
+    config: Config.Databricks,
+    uuid: UUID,
+    now: Instant,
+    retryAttemptCounter: Int
+  ): String = {
+    val partition = timePartition(now)
+    val name      = filename(config, now, uuid, retryAttemptCounter)
+    s"/Volumes/${config.catalog}/${config.schema}/${config.volume}/events/$partition/$name"
+  }
 
   private def databricksConfig(config: Config.Databricks): DatabricksConfig = {
     val c = new DatabricksConfig()
@@ -116,11 +119,12 @@ object DatabricksUploader {
   private def filename(
     config: Config.Databricks,
     loadTstamp: Instant,
-    uuid: UUID
+    uuid: UUID,
+    retryAttemptCounter: Int
   ): String = {
     val ext    = config.compression.getExtension
     val prefix = secondFormatter.format(loadTstamp)
-    s"$prefix-$uuid$ext.parquet"
+    s"$prefix-$uuid-$retryAttemptCounter$ext.parquet"
   }
 
   private def timePartition(loadTstamp: Instant): String = {

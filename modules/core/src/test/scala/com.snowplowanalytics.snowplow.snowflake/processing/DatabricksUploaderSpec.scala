@@ -33,6 +33,7 @@ class DatabricksUploaderSpec extends Specification with CatsEffect {
     Not increment databricks_errors metric when upload succeeds $e2
     Increment databricks_errors metric once per retry attempt $e3
     Increment setup_errors metric when setup error occurs $e4
+    Include attemptCounter in filename for each retry attempt $e5
   """
 
   def e1 = {
@@ -99,6 +100,33 @@ class DatabricksUploaderSpec extends Specification with CatsEffect {
       databricksErrorCount must beEqualTo(0)
     ).reduce(_ and _)
   }
+
+  def e5 =
+    for {
+      state <- Ref[IO].of(MockEnvironment.Results(Vector.empty, Vector.empty))
+      pathsRef <- Ref[IO].of(List.empty[String])
+      metrics = MockEnvironment.testMetrics(state)
+      // Fail 3 times, capturing paths along the way
+      underlying <- pathCapturingUploader(pathsRef, failureCount = 3)
+      uploader = DatabricksUploader.withHandledErrors(underlying, testAppHealth, testConfig, retriesWithAttempts(5), metrics)
+      result <- uploader.upload(testBytes).attempt
+      capturedPaths <- pathsRef.get
+      // Extract everything except the attempt counter from each path
+      pathsWithoutCounter = capturedPaths.map { path =>
+                              // Replace the counter (e.g., "-0.snappy.parquet", "-1.snappy.parquet") with a placeholder
+                              path.replaceAll("-\\d+\\.snappy\\.parquet$", "-X.snappy.parquet")
+                            }
+    } yield List(
+      result must beRight, // Eventually succeeds after retries
+      capturedPaths.size must beEqualTo(4), // 3 failures + 1 success
+      // Check that attemptCounter is included in each filename
+      capturedPaths(0) must contain("-0.snappy.parquet"), // First attempt (counter = 0)
+      capturedPaths(1) must contain("-1.snappy.parquet"), // Second attempt (counter = 1)
+      capturedPaths(2) must contain("-2.snappy.parquet"), // Third attempt (counter = 2)
+      capturedPaths(3) must contain("-3.snappy.parquet"), // Fourth attempt (counter = 3, succeeds)
+      // Verify all paths are identical except for the attempt counter
+      pathsWithoutCounter.distinct.size must beEqualTo(1)
+    ).reduce(_ and _)
 }
 
 object DatabricksUploaderSpec {
@@ -157,6 +185,23 @@ object DatabricksUploaderSpec {
         } else {
           IO.unit
         }
+      }
+    }
+
+  /** Mock DatabricksUploader that captures paths and fails N times then succeeds */
+  def pathCapturingUploader(pathsRef: Ref[IO, List[String]], failureCount: Int): IO[DatabricksUploader[IO]] =
+    Ref[IO].of(0).map { counterRef =>
+      new DatabricksUploader[IO] {
+        def upload(bytes: ByteArrayInputStream, path: String): IO[Unit] =
+          for {
+            attempt <- counterRef.updateAndGet(_ + 1)
+            _ <- pathsRef.update(_ :+ path)
+            _ <- if (attempt <= failureCount) {
+                   IO.raiseError(new RuntimeException(s"Databricks API failure (attempt $attempt)"))
+                 } else {
+                   IO.unit
+                 }
+          } yield ()
       }
     }
 }
