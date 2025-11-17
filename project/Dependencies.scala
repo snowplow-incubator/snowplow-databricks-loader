@@ -37,7 +37,7 @@ object Dependencies {
     val nimbusJoseJwt = "9.37.4" // Version override
 
     // Snowplow
-    val streams    = "0.14.1"
+    val streams    = "0.17.0"
     val igluClient = "4.0.0"
 
     // tests

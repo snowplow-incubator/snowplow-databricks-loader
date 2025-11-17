@@ -12,10 +12,10 @@ package com.snowplowanalytics.snowplow.databricks
 
 import cats.effect.IO
 
-import com.snowplowanalytics.snowplow.streams.kinesis.{KinesisFactory, KinesisSinkConfig, KinesisSourceConfig}
+import com.snowplowanalytics.snowplow.streams.kinesis.{KinesisFactory, KinesisFactoryConfig, KinesisSinkConfig, KinesisSourceConfig}
 
-object AwsApp extends LoaderApp[Unit, KinesisSourceConfig, KinesisSinkConfig](BuildInfo) {
+object AwsApp extends LoaderApp[KinesisFactoryConfig, KinesisSourceConfig, KinesisSinkConfig](BuildInfo) {
 
-  override def toFactory: FactoryProvider = _ => KinesisFactory.resource[IO]
+  override def toFactory: FactoryProvider = KinesisFactory.resource[IO](_)
 
 }
