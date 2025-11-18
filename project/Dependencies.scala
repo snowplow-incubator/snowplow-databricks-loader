@@ -35,6 +35,7 @@ object Dependencies {
     val jsonSmart     = "2.5.2" // Version override
     val bouncycastle  = "1.79" // Version override
     val nimbusJoseJwt = "9.37.4" // Version override
+    val grpcNetty     = "1.75.0"
 
     // Snowplow
     val streams    = "0.17.0"
@@ -72,6 +73,7 @@ object Dependencies {
   val jsonSmart       = "net.minidev"        % "json-smart"        % V.jsonSmart
   val bouncycastle    = "org.bouncycastle"   % "bcprov-jdk18on"    % V.bouncycastle
   val nimbusJoseJwt   = "com.nimbusds"       % "nimbus-jose-jwt"   % V.nimbusJoseJwt
+  val grpcNetty       = "io.grpc"            % "grpc-netty-shaded" % V.grpcNetty
 
   val streamsCore      = "com.snowplowanalytics" %% "streams-core"             % V.streams
   val kinesis          = "com.snowplowanalytics" %% "kinesis"                  % V.streams
@@ -125,6 +127,7 @@ object Dependencies {
   val pubsubDependencies = Seq(
     pubsub,
     nimbusJoseJwt, // for security vulnerabilities
+    grpcNetty, // for security vulnerabilities
     jaxb             % Runtime,
     slf4j            % Runtime,
     log4jOverSlf4j   % Runtime,
