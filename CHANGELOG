@@ -1,3 +1,10 @@
+Version 0.4.0 (2025-11-19)
+--------------------------
+Fix setup error metric classification (#19)
+Bump common-streams to 0.17.0 (#20)
+Re-upload files after a AlreadyExists exception (#20)
+Bump grpc-netty-shaded to 1.75.0 (#21)
+
 Version 0.3.0 (2025-10-22)
 --------------------------
 Fix vulnerabilities (#18)
